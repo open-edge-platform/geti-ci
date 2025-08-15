@@ -1,3 +1,6 @@
+# This workflow implements quality checks, tests,
+# and security scans for pull requests.
+
 name: Pre-merge checks
 
 on:
@@ -25,6 +28,6 @@ jobs:
         uses: ./actions/zizmor
         with:
           scan-scope: "changed"
-          severity-level: "MEDIUM"
-          confidence-level: "HIGH"
+          severity-level: "LOW"
+          confidence-level: "LOW"
           fail-on-findings: true

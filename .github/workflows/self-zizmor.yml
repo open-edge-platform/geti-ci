@@ -7,7 +7,6 @@ on:
   schedule:
     # Run security checks every day at 2 AM UTC
     - cron: "0 2 * * *"
-  push:
 
 permissions: {}
 
@@ -33,4 +32,3 @@ jobs:
           severity-level: "LOW"
           confidence-level: "LOW"
           fail-on-findings: false # reports only
-
