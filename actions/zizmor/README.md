@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run Zizmor scan
-        uses: ./.github/actions/security/zizmor
+        uses: ./actions/zizmor
         with:
           scan-scope: changed
           severity-level: MEDIUM
@@ -55,15 +55,15 @@ jobs:
 
 ## Inputs
 
-| Name               | Type    | Description                                          | Default Value | Required |
-| ------------------ | ------- | ---------------------------------------------------- | ------------- | -------- |
-| `scan-scope`       | String  | Scope of files to scan (all/changed)                 | `changed`     | No       |
-| `paths`            | String  | Paths to scan when using all scope                   | `.`           | No       |
-| `severity-level`   | String  | Minimum severity level to report (LOW/MEDIUM/HIGH)   | `LOW`         | No       |
-| `confidence-level` | String  | Minimum confidence level to report (LOW/MEDIUM/HIGH) | `LOW`         | No       |
-| `output-format`    | String  | Format for scan results (plain/json/sarif)           | `sarif`       | No       |
-| `fail-on-findings` | boolean | Whether to fail the action if issues are found       | `true`        | No       |
-| `zizmor-version`   | String  | Zizmor version                                       | `1.11.0`       | No       |
+| Name               | Type    | Description                                          | Default Value       | Required |
+| ------------------ | ------- | ---------------------------------------------------- | ------------------- | -------- |
+| `scan-scope`       | String  | Scope of files to scan (all/changed)                 | `changed`           | No       |
+| `paths`            | String  | Paths to scan when using all scope                   | `.`                 | No       |
+| `severity-level`   | String  | Minimum severity level to report (LOW/MEDIUM/HIGH)   | `LOW`               | No       |
+| `confidence-level` | String  | Minimum confidence level to report (LOW/MEDIUM/HIGH) | `LOW`               | No       |
+| `output-format`    | String  | Format for scan results (plain/json/sarif)           | `sarif`             | No       |
+| `fail-on-findings` | boolean | Whether to fail the action if issues are found       | `true`              | No       |
+| `zizmor-version`   | String  | Zizmor version                                       | Updated by Renovate | No       |
 
 If necessary, put zizmor configuration into default location `.github/zizmor.yml` - zizmor will discover and us it.
 

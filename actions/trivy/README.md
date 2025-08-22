@@ -27,6 +27,7 @@ permissions:
 
       # These steps are required to lock dependencies in requirements.txt that will by used by Trivy
       # Adjust based on your project
+      # if lock file is already available (e.g., uv.lock), skip this step
       - name: Set up Python
         uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
         with:
@@ -38,7 +39,7 @@ permissions:
 
       - name: Run Trivy scan
         id: trivy
-        uses: ./.github/actions/security/trivy
+        uses: ./actions/trivy
         with:
           scan_type: "fs"
           scan-scope: all
@@ -65,6 +66,7 @@ permissions:
 | `timeout`            | String  | Timeout duration (e.g., 5m, 10m)                                                                           | `10m`                                                                         | No       |
 | `generate_sbom`      | boolean | Generate Software Bill of Materials (SBOM)                                                                 | `false`                                                                       | No       |
 | `sbom_format`        | String  | SBOM output format (cyclonedx, spdx, spdx-json)                                                            | `spdx-json`                                                                   | No       |
+| `trivy-version`      | String  | Trivy version                                                                                              | Updated by Renovate                                                           | No       |
 
 ## Outputs
 

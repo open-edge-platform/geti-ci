@@ -44,7 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run Semgrep scan
-        uses: ./.github/actions/security/semgrep
+        uses: ./actions/semgrep
         with:
           scan-scope: all
           severity: LOW
@@ -62,6 +62,8 @@ jobs:
 | `output-format`    | String  | Format for scan results (plain/json/sarif)         | `sarif`                                                | No       |
 | `fail-on-findings` | boolean | Whether to fail the action if issues are found     | `true`                                                 | No       |
 | `timeout`          | String  | Maximum time to run semgrep in seconds             | `300`                                                  | No       |
+| `timeout`          | String  | Maximum time to run semgrep in seconds             | `300`                                                  | No       |
+| `semgrep-version`  | String  | Semgrep version                                    | Updated by Renovate                                    | No       |
 
 ## Outputs
 

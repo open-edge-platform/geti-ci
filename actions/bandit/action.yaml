@@ -75,6 +75,11 @@ inputs:
     description: "Whether to fail the action if issues are found"
     required: false
     default: "true"
+  bandit-version:
+    description: "bandit version"
+    required: false
+    # renovate: datasource=pypi depName=bandit
+    default: 1.8.5
 
 outputs:
   scan_result:
@@ -94,9 +99,11 @@ runs:
 
     - name: Install Bandit
       shell: bash
+      env:
+        BANDIT_VERSION: ${{ inputs.bandit-version }}
       run: |
         python -m pip install --upgrade pip
-        pip install bandit[toml,sarif]
+        pip install bandit[toml,sarif]=="$BANDIT_VERSION"
 
     - name: Get changed files
       if: inputs.scan-scope == 'changed'
