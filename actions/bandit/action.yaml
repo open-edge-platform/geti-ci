@@ -132,8 +132,7 @@ runs:
         INPUTS_OUTPUT_FORMAT: ${{ inputs.output-format }}
         INPUTS_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
         INPUTS_ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
-      # zizmor ignore: all_changed_files is tj-actions/changed-files output
-      run: | # zizmor: ignore[template-injection]
+      run: |
         set +e
         REPORT_FILE="bandit-report.$INPUTS_OUTPUT_FORMAT"
 
@@ -143,6 +142,7 @@ runs:
 
         if [[ "$INPUTS_SCAN_SCOPE" == "changed" && -n "${INPUTS_ALL_CHANGED_FILES}" ]]; then
           echo "Running Bandit on changed files, output results into workflow log only"
+          echo "Changed files: ${INPUTS_ALL_CHANGED_FILES}"
           FILES="${INPUTS_ALL_CHANGED_FILES}"
           bandit \
             -a file \
