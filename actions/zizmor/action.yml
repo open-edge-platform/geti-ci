@@ -4,7 +4,7 @@
 # providing configurable security analysis capabilities.
 #
 # Example Usage:
-#jobs:
+# jobs:
 #  zizmor:
 #    runs-on: ubuntu-latest
 #    steps:
@@ -65,6 +65,11 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Checkout code
+      uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      with:
+        persist-credentials: false
+
     - name: Install uv
       uses: astral-sh/setup-uv@e92bafb6253dcd438e0484186d7669ea7a8ca1cc # v6.4.3
       with:
@@ -78,8 +83,9 @@ runs:
       id: changed-files
       uses: tj-actions/changed-files@ed68ef82c095e0d48ec87eccea555d944a631a4c # v46.0.5
       with:
-        files: .github/**
-
+        files: |
+          **/*.yaml
+          **/*.yml
     - name: Run Zizmor
       id: run-zizmor
       shell: bash
@@ -91,9 +97,9 @@ runs:
         INPUTS_OUTPUT_FORMAT: ${{ inputs.output-format }}
         INPUTS_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
         ZIZMOR_VERSION: ${{ inputs.zizmor-version }}
-        STEPS_CHANGED_FILES_OUTPUTS_ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+        INPUTS_ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
 
-      # For changed scope: if changes in .github/** are detected, we rescan all files because
+      # For changed scope: if changes in yaml/yml files are detected, we rescan all files because
       # providing individual non-workflow files (even yaml) to Zizmor causes errors ("invalid GitHub Actions workflow").
       # Based on the assumption that workflows are maintained in a valid state, this will not trigger alerts unrelated to the PR.
 
@@ -105,8 +111,9 @@ runs:
         SEVERITY=$(echo "$INPUTS_SEVERITY_LEVEL" | tr '[:upper:]' '[:lower:]')
         CONFIDENCE=$(echo "$INPUTS_CONFIDENCE_LEVEL" | tr '[:upper:]' '[:lower:]')
 
-        if [[ "$INPUTS_SCAN_SCOPE" == "changed" && -n "$STEPS_CHANGED_FILES_OUTPUTS_ALL_CHANGED_FILES" ]]; then
-          echo "There are some changes detected in .github/, checking with Zizmor"
+        if [[ "$INPUTS_SCAN_SCOPE" == "changed" && -n "$INPUTS_ALL_CHANGED_FILES" ]]; then
+          echo "There are some changes detected in yaml/yml, checking with Zizmor"
+          echo "Changed files: ${INPUTS_ALL_CHANGED_FILES}"
           uvx zizmor=="$ZIZMOR_VERSION" \
               --min-confidence ${CONFIDENCE} \
               --min-severity ${SEVERITY} \
