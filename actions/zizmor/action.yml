@@ -83,8 +83,9 @@ runs:
       id: changed-files
       uses: tj-actions/changed-files@ed68ef82c095e0d48ec87eccea555d944a631a4c # v46.0.5
       with:
-        files: .github/**
-
+        files: |
+          **/*.yaml
+          **/*.yml
     - name: Run Zizmor
       id: run-zizmor
       shell: bash
@@ -98,7 +99,7 @@ runs:
         ZIZMOR_VERSION: ${{ inputs.zizmor-version }}
         STEPS_CHANGED_FILES_OUTPUTS_ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
 
-      # For changed scope: if changes in .github/** are detected, we rescan all files because
+      # For changed scope: if changes in yaml/yml files are detected, we rescan all files because
       # providing individual non-workflow files (even yaml) to Zizmor causes errors ("invalid GitHub Actions workflow").
       # Based on the assumption that workflows are maintained in a valid state, this will not trigger alerts unrelated to the PR.
 
