@@ -131,8 +131,8 @@ runs:
         INPUTS_TIMEOUT: ${{ inputs.timeout }}
         INPUTS_OUTPUT_FORMAT: ${{ inputs.output-format }}
         INPUTS_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
-      # zizmor ignore: all_changed_files is tj-actions/changed-files output
-      run: | # zizmor: ignore[template-injection]
+        INPUTS_ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+      run: |
         set +e
         # Map standard severity levels to Semgrep's levels
         # Semgrep does not support hierarchy, levels must be set explicitly
@@ -156,9 +156,10 @@ runs:
 
         REPORT_FILE="security-results/semgrep/semgrep-results.$INPUTS_OUTPUT_FORMAT"
 
-        if [[ "$INPUTS_SCAN_SCOPE" == "changed" && -n "${{ steps.changed-files.outputs.all_changed_files }}" ]]; then
+        if [[ "$INPUTS_SCAN_SCOPE" == "changed" && -n "${INPUTS_ALL_CHANGED_FILES}" ]]; then
           echo "Running Semgrep on changed files, output results into workflow log only"
-          FILES="${{ steps.changed-files.outputs.all_changed_files }}"
+          echo "Changed files: ${INPUTS_ALL_CHANGED_FILES}"
+          FILES="${INPUTS_ALL_CHANGED_FILES}"
         semgrep \
           ${SEMGREP_SEVERITY} \
           --error \
