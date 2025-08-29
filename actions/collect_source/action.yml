@@ -4,9 +4,13 @@ inputs:
   images:
     description: "Comma-separated list of container images to inspect"
     required: true
-  archive-path:
-    description: "Path to store the archived source code"
+  archive-name:
+    description: "File name to store the archived source code"
     required: true
+  output-dir:
+    description: "Path to store temporarily the downloaded source code"
+    required: false
+    default: "output"
 runs:
   using: composite
   steps:
@@ -14,8 +18,8 @@ runs:
       shell: bash
       env:
         IMAGES: ${{ inputs.images }}
+        OUTPUT_DIR : ${{ inputs.output-dir }}
       run: |
-        OUTPUT_DIR="output"
         mkdir -p "$OUTPUT_DIR"
         IFS=',' read -r -a IMAGES <<< "$IMAGES"
         for IMAGE in "${IMAGES[@]}"; do
@@ -37,14 +41,19 @@ runs:
     - name: Archive collected source code
       shell: bash
       env:
-        ARCHIVE_PATH: ${{ inputs.archive-path }}
+        ARCHIVE_NAME: ${{ inputs.archive-name }}
+        OUTPUT_DIR : ${{ inputs.output-dir }}
       run: |
-        OUTPUT_DIR="output"
-        tar -czf "$ARCHIVE_PATH" -C "$OUTPUT_DIR" .
+        if [ -d "$OUTPUT_DIR" ] && [ "$(ls -A "$OUTPUT_DIR/output_debian")" ]; then
+          tar -czf "$ARCHIVE_NAME" -C "$OUTPUT_DIR/output_debian/" .
+        else
+          echo "No files to archive in $OUTPUT_DIR"
+        fi
 
     - name: Upload source code archive as artifact
+      if: ${{ inputs.archive-name && exists(inputs.archive-name) }}
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
         name: source-code-archive
-        path: ${{ inputs.archive-path }}
+        path: ${{ inputs.archive-name }}
         retention-days: 7
