@@ -12,10 +12,12 @@ runs:
   steps:
   - name: Download packages source code from images
     shell: bash
+    env:
+      IMAGES: ${{ inputs.images }}
     run: |
       OUTPUT_DIR="output"
       mkdir -p "$OUTPUT_DIR"
-      IFS=',' read -r -a IMAGES <<< "${{ inputs.images }}"
+      IFS=',' read -r -a IMAGES <<< "$IMAGES"
       for IMAGE in "${IMAGES[@]}"; do
         # Check if image is based on Debian and version is 12
         docker run --rm --entrypoint cat $IMAGE /etc/os-release > "$OUTPUT_DIR/os-release"
