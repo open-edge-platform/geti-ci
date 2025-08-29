@@ -36,9 +36,11 @@ runs:
 
   - name: Archive collected source code
     shell: bash
+    env:
+      ARCHIVE_PATH: ${{ inputs.archive-path }}
     run: |
       OUTPUT_DIR="output"
-      tar -czf "${{ inputs.archive-path }}" -C "$OUTPUT_DIR" .
+      tar -czf "$ARCHIVE_PATH" -C "$OUTPUT_DIR" .
 	
   - name: Upload source code archive as artifact
     uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
