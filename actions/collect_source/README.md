@@ -25,7 +25,6 @@ jobs:
         with:
           images: "ghcr.io/open-edge-platform/geti/account-service:2.12.1,"ghcr.io/open-edge-platform/geti/credit-service:2.12.1","ghcr.io/open-edge-platform/geti/director:2.12.1""
           archive-name: source_archive.tgz
-          
 ```
 
 ## Inputs
