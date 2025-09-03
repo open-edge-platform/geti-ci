@@ -27,9 +27,33 @@ runs:
           docker run --rm --entrypoint cat $IMAGE /etc/os-release > "$OUTPUT_DIR/os-release"
           if grep -q '^ID=debian' "$OUTPUT_DIR/os-release" && grep -q 'VERSION_ID="12"' "$OUTPUT_DIR/os-release"; then
             echo "$IMAGE is based on Debian 12"
-            docker run -u 0 --entrypoint bash -v "$PWD/$OUTPUT_DIR":/output $IMAGE -c 'dpkg --get-selections | sed "s/\t//g" | sed "s/install//g" | cut -d":" -f1 | tr -d "\r"' > "$OUTPUT_DIR/debian.txt"
-            docker run -u 0 --entrypoint bash -v "$PWD/$OUTPUT_DIR":/output $IMAGE -c 'cd /output ; cat debian.txt | tr -d "\r" | xargs -I % bash -c "[ -f /usr/share/doc/%/copyright ] && grep -l -e GPL -e MPL /usr/share/doc/%/copyright || true" 2> /dev/null' > "$OUTPUT_DIR/sources.txt"
-            docker run -u 0 --entrypoint bash -v "$PWD/$OUTPUT_DIR":/output $IMAGE -c 'sed -Ei "s/^Types: deb$/Types: deb deb-src/" /etc/apt/sources.list.d/debian.sources ; apt update ; cd /output ; d="output_debian" ; mkdir -p "$d" ; cd "$d" ; for I in $(cat /output/sources.txt | cut -d"/" -f5 | sort -u); do apt-get source -q --download-only $I; done'
+            docker run -u 0 --entrypoint bash -v "$PWD/$OUTPUT_DIR":/output $IMAGE -c '
+              dpkg --get-selections | \
+              sed "s/\t//g" | \
+              sed "s/install//g" | \
+              cut -d":" -f1 | \
+              tr -d "\r"
+            ' > "$OUTPUT_DIR/debian.txt"
+            docker run -u 0 --entrypoint bash -v "$PWD/$OUTPUT_DIR":/output $IMAGE -c '
+              cd /output
+              cat debian.txt | tr -d "\r" | \
+              xargs -I % bash -c "
+                if [ -f /usr/share/doc/%/copyright ]; then
+                  grep -l -e GPL -e MPL /usr/share/doc/%/copyright
+                fi
+              " 2> /dev/null
+            ' > "$OUTPUT_DIR/sources.txt"
+            docker run -u 0 --entrypoint bash -v "$PWD/$OUTPUT_DIR":/output $IMAGE -c '
+              sed -Ei "s/^Types: deb$/Types: deb deb-src/" /etc/apt/sources.list.d/debian.sources
+              apt update
+              cd /output
+              d="output_debian"
+              mkdir -p "$d"
+              cd "$d"
+              for I in $(cat /output/sources.txt | cut -d"/" -f5 | sort -u); do
+                apt-get source -q --download-only $I
+              done
+            '
             rm "$OUTPUT_DIR/debian.txt" "$OUTPUT_DIR/sources.txt" "$OUTPUT_DIR/os-release"
           else
             echo "$IMAGE is NOT based on Debian 12"
