@@ -1,0 +1,83 @@
+name: "Collect and Archive GPL/MPL Source Code"
+description: "Inspects container images, collects and archives corresponding GPL/MPL source code without duplication."
+inputs:
+  images:
+    description: "Comma-separated list of container images to inspect"
+    required: true
+  archive-name:
+    description: "File name to store the archived source code"
+    required: true
+  output-dir:
+    description: "Path to store temporarily the downloaded source code"
+    required: false
+    default: "output"
+runs:
+  using: composite
+  steps:
+    - name: Download packages source code from images
+      shell: bash
+      env:
+        IMAGES: ${{ inputs.images }}
+        OUTPUT_DIR : ${{ inputs.output-dir }}
+      run: |
+        mkdir -p "$OUTPUT_DIR"
+        IFS=',' read -r -a IMAGES <<< "$IMAGES"
+        for IMAGE in "${IMAGES[@]}"; do
+          # Check if image is based on Debian and version is 12
+          docker run --rm --entrypoint cat $IMAGE /etc/os-release > "$OUTPUT_DIR/os-release"
+          if grep -q '^ID=debian' "$OUTPUT_DIR/os-release" && grep -q 'VERSION_ID="12"' "$OUTPUT_DIR/os-release"; then
+            echo "$IMAGE is based on Debian 12"
+            docker run -u 0 --entrypoint bash -v "$PWD/$OUTPUT_DIR":/output $IMAGE -c '
+              dpkg --get-selections | \
+              sed "s/\t//g" | \
+              sed "s/install//g" | \
+              cut -d":" -f1 | \
+              tr -d "\r"
+            ' > "$OUTPUT_DIR/debian.txt"
+            docker run -u 0 --entrypoint bash -v "$PWD/$OUTPUT_DIR":/output $IMAGE -c '
+              cd /output
+              cat debian.txt | tr -d "\r" | \
+              xargs -I % bash -c "
+                if [ -f /usr/share/doc/%/copyright ]; then
+                  grep -l -e GPL -e MPL /usr/share/doc/%/copyright
+                fi
+              " 2> /dev/null
+            ' > "$OUTPUT_DIR/sources.txt"
+            docker run -u 0 --entrypoint bash -v "$PWD/$OUTPUT_DIR":/output $IMAGE -c '
+              sed -Ei "s/^Types: deb$/Types: deb deb-src/" /etc/apt/sources.list.d/debian.sources
+              apt update
+              cd /output
+              d="output_debian"
+              mkdir -p "$d"
+              cd "$d"
+              for I in $(cat /output/sources.txt | cut -d"/" -f5 | sort -u); do
+                apt-get source -q --download-only $I
+              done
+            '
+            rm "$OUTPUT_DIR/debian.txt" "$OUTPUT_DIR/sources.txt" "$OUTPUT_DIR/os-release"
+          else
+            echo "$IMAGE is NOT based on Debian 12"
+            rm "$OUTPUT_DIR/os-release"
+            continue
+          fi
+        done
+
+    - name: Archive collected source code
+      shell: bash
+      env:
+        ARCHIVE_NAME: ${{ inputs.archive-name }}
+        OUTPUT_DIR : ${{ inputs.output-dir }}
+      run: |
+        if [ -d "$OUTPUT_DIR" ] && [ "$(ls -A "$OUTPUT_DIR/output_debian")" ]; then
+          tar -czf "$ARCHIVE_NAME" -C "$OUTPUT_DIR/output_debian/" .
+        else
+          echo "No files to archive in $OUTPUT_DIR"
+        fi
+
+    - name: Upload source code archive as artifact
+      if: ${{ inputs.archive-name && exists(inputs.archive-name) }}
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: source-code-archive
+        path: ${{ inputs.archive-name }}
+        retention-days: 7
