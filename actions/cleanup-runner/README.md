@@ -11,9 +11,9 @@ This composite action frees up disk space and cleans Docker resources on a GitHu
 
 ## Inputs
 
-| Name   | Type   | Description                                      | Default Value | Required |
-| ------ | ------ | ------------------------------------------------ | ------------- | -------- |
-| `type` | String | Type of cleanup to perform: initial or pre-build | `initial`     | True     |
+| Name   | Type   | Description                                                 | Default Value | Required |
+| ------ | ------ | ----------------------------------------------------------- | ------------- | -------- |
+| `type` | String | Type of cleanup to perform: `initial`, `pre-build` or `all` | `initial`     | True     |
 
 ## Outputs
 
