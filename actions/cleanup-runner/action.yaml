@@ -3,7 +3,7 @@ description: "Free up disk space and clean Docker resources on GitHub Actions ru
 
 inputs:
   type:
-    description: "Type of cleanup to perform: initial or pre-build"
+    description: "Type of cleanup to perform: initial, pre-build or all"
     required: true
     default: "initial"
 
@@ -20,18 +20,17 @@ runs:
         echo ""
 
     - name: System cleanup
-      if: inputs.type == 'initial'
+      if: ${{ inputs.type == 'initial' || inputs.type == 'all' }}
       shell: bash
       run: |
         echo "=== Performing System Cleanup ==="
-
         sudo rm -rf /opt/hostedtoolcache || true
-        if [ -f /swapfile ]; then
-          sudo swapoff -a
-          sudo rm -f /swapfile
-        fi
+        sudo swapoff -a
+        sudo rm -f /swapfile || true
+        sudo rm -f /mnt/swapfile || true
 
         echo "Removing unnecessary system packages..."
+        sudo rm -rf /usr/lib/jvm || true
         sudo rm -rf /usr/share/dotnet || true
         sudo rm -rf /opt/ghc || true
         sudo rm -rf /usr/local/share/boost || true
@@ -40,24 +39,20 @@ runs:
         sudo rm -rf /usr/share/swift || true
         sudo rm -rf /opt/az || true
         sudo rm -rf /usr/share/gradle || true
-
         sudo rm -rf /usr/share/locale/* || true
         sudo rm -rf /usr/share/man/* || true
         sudo rm -rf /usr/share/doc/* || true
-
-        echo "Cleaning package manager caches..."
-        sudo apt-get clean
-        sudo apt-get autoremove -y
-        sudo apt-get autoclean
+        sudo rm -rf /usr/local/.ghcup || true
+        sudo rm -rf /usr/local/julia* || true
+        sudo rm -rf /usr/local/share/powershell || true
 
     - name: Pre-build cleanup
-      if: inputs.type == 'pre-build'
+      if: ${{ inputs.type == 'pre-build' || inputs.type == 'all' }}
       shell: bash
       run: |
         echo "=== Performing Pre-build Cleanup ==="
         docker system prune -a -f --volumes || true
         docker builder prune -a -f || true
-
         echo "Cleaning temporary files..."
         sudo rm -rf /tmp/* || true
         sudo rm -rf /var/tmp/* || true
@@ -70,3 +65,4 @@ runs:
         free -h
         docker system df 2>/dev/null || echo "Docker not available"
         echo ""
+
