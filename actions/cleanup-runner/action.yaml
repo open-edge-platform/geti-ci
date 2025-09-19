@@ -65,4 +65,3 @@ runs:
         free -h
         docker system df 2>/dev/null || echo "Docker not available"
         echo ""
-
