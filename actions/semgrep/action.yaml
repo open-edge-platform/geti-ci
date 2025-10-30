@@ -106,27 +106,16 @@ runs:
         python -m pip install --upgrade pip
         pip install semgrep=="$SEMGREP_VERSION"
 
-    - name: Get changed files
-      if: inputs.scan-scope == 'changed'
-      id: changed-files
-      uses: tj-actions/changed-files@ed68ef82c095e0d48ec87eccea555d944a631a4c # v46.0.5
-      with:
-        files: |
-          **/*.*
 
     - name: Run Semgrep scan
       id: run-semgrep
       shell: bash
-      # Set the SEMGREP_RULES environment variable to specify which rules Semgrep should use.
       env:
         SEMGREP_RULES: ${{ inputs.config }}
-        INPUTS_SCAN_SCOPE: ${{ inputs.scan-scope }}
-        INPUTS_PATHS: ${{ inputs.paths }}
         INPUTS_SEVERITY: ${{ inputs.severity }}
         INPUTS_TIMEOUT: ${{ inputs.timeout }}
         INPUTS_OUTPUT_FORMAT: ${{ inputs.output-format }}
         INPUTS_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
-        INPUTS_ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
       run: |
         set +e
         # Map standard severity levels to Semgrep's levels
@@ -146,41 +135,33 @@ runs:
             ;;
         esac
 
-        # Create results directory
-        mkdir -p security-results/semgrep
+        echo "Running Semgrep in 'ci' mode which is diff-aware and respects .semgrepignore."
 
-        REPORT_FILE="security-results/semgrep/semgrep-results.$INPUTS_OUTPUT_FORMAT"
-
-        if [[ "$INPUTS_SCAN_SCOPE" == "changed" && -n "${INPUTS_ALL_CHANGED_FILES}" ]]; then
-          echo "Running Semgrep on changed files, output results into workflow log only"
-          echo "Changed files: ${INPUTS_ALL_CHANGED_FILES}"
-          FILES="${INPUTS_ALL_CHANGED_FILES}"
-        semgrep \
-          ${SEMGREP_SEVERITY} \
-          --error \
-          --timeout "$INPUTS_TIMEOUT" \
-          --metrics=off \
-          ${FILES}
-        exit_code="$?"
-        echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
-
-        elif [[ "$INPUTS_SCAN_SCOPE" == "all" ]] ; then
-          echo "Running Semgrep on all files in $INPUTS_PATHS"
-        semgrep \
-          ${SEMGREP_SEVERITY} \
-          --error \
-          --metrics=off \
-          --timeout "$INPUTS_TIMEOUT" \
-          --"$INPUTS_OUTPUT_FORMAT" \
-          -o "${REPORT_FILE}" \
-          "$INPUTS_PATHS"
-        exit_code="$?"
-        echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
-        echo "report_path=${REPORT_FILE}" >> $GITHUB_OUTPUT
-
+        # Build the output command flags
+        OUTPUT_FLAGS=""
+        if [[ "$INPUTS_OUTPUT_FORMAT" != "text" ]]; then
+          # Handle non-text outputs like 'sarif' or 'json'
+          mkdir -p security-results/semgrep
+          REPORT_FILE="security-results/semgrep/semgrep-results.$INPUTS_OUTPUT_FORMAT"
+          OUTPUT_FLAGS="--${INPUTS_OUTPUT_FORMAT} -o ${REPORT_FILE}"
+          echo "report_path=${REPORT_FILE}" >> $GITHUB_OUTPUT
         else
-          echo "No files to scan found"
+          # Output is "text", so print to console (stdout)
+          # 'semgrep ci' does this by default, but --text makes it explicit.
+          OUTPUT_FLAGS="--text"
         fi
+
+        # In a PR, it scans changed files. On 'main', it scans all files.
+        # It respects .semgrepignore.
+        semgrep ci \
+          ${SEMGREP_SEVERITY} \
+          --error \
+          --metrics=off \
+          --timeout "$INPUTS_TIMEOUT" \
+          ${OUTPUT_FLAGS}
+
+        exit_code="$?"
+        echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
 
         if [[ "$INPUTS_FAIL_ON_FINDINGS" == "true" && -n "$exit_code" && "$exit_code" != "0" ]]; then
           exit $exit_code
