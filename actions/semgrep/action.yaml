@@ -103,7 +103,8 @@ runs:
       id: run-semgrep
       shell: bash
       env:
-        SEMGREP_RULES: ${{ inputs.config }} # https://semgrep.dev/docs/semgrep-ci/ci-environment-variables#semgrep_rules
+        # https://semgrep.dev/docs/semgrep-ci/ci-environment-variables#semgrep_rules
+        SEMGREP_RULES: ${{ inputs.config }}
         INPUTS_SCAN_SCOPE: ${{ inputs.scan-scope }}
         INPUTS_PATHS: ${{ inputs.paths }}
         INPUTS_SEVERITY: ${{ inputs.severity }}
@@ -138,7 +139,7 @@ runs:
           echo "baseline-commit is ${{ github.event.pull_request.base.sha }}"
 
           # On changed scope (i.e., check on PR), action outputs results in a text format into console
-          # and duplicate it into SARIF file with --sarif-output
+          # and duplicates it into SARIF file with --sarif-output
           # SARIF results will be uploaded into PR comments for public repos
           # baseline-commit is used to trigger diff-aware scan
           semgrep scan \
