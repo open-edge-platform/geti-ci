@@ -35,13 +35,6 @@
 # - scan_result: Scan exit code
 # - report_path: Results location
 #
-# Example Usage:
-# steps:
-#   - uses: ./actions/semgrep
-#     with:
-#       scan-scope: "changed"
-#       config: "p/owasp-top-ten"
-#
 # Note: Consider using custom rule sets for project-specific checks
 
 name: "Semgrep SAST Scan"
@@ -106,16 +99,18 @@ runs:
         python -m pip install --upgrade pip
         pip install semgrep=="$SEMGREP_VERSION"
 
-
     - name: Run Semgrep scan
       id: run-semgrep
       shell: bash
       env:
+        # https://semgrep.dev/docs/semgrep-ci/ci-environment-variables#semgrep_rules
         SEMGREP_RULES: ${{ inputs.config }}
+        INPUTS_SCAN_SCOPE: ${{ inputs.scan-scope }}
+        INPUTS_PATHS: ${{ inputs.paths }}
         INPUTS_SEVERITY: ${{ inputs.severity }}
         INPUTS_TIMEOUT: ${{ inputs.timeout }}
         INPUTS_OUTPUT_FORMAT: ${{ inputs.output-format }}
-        INPUTS_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: |
         set +e
         # Map standard severity levels to Semgrep's levels
@@ -135,39 +130,72 @@ runs:
             ;;
         esac
 
-        echo "Running Semgrep in 'ci' mode which is diff-aware and respects .semgrepignore."
+        # Create results directory
+        mkdir -p security-results/semgrep
 
-        # Build the output command flags
-        OUTPUT_FLAGS=""
-        if [[ "$INPUTS_OUTPUT_FORMAT" != "text" ]]; then
-          # Handle non-text outputs like 'sarif' or 'json'
-          mkdir -p security-results/semgrep
-          REPORT_FILE="security-results/semgrep/semgrep-results.$INPUTS_OUTPUT_FORMAT"
-          OUTPUT_FLAGS="--${INPUTS_OUTPUT_FORMAT} -o ${REPORT_FILE}"
-          echo "report_path=${REPORT_FILE}" >> $GITHUB_OUTPUT
+        SARIF_FILE="security-results/semgrep/semgrep-results.sarif"
+
+        if [[ "$INPUTS_SCAN_SCOPE" == "changed" ]]; then
+          echo "Running Semgrep on changed scope with diff-aware scan:"
+          echo "baseline-commit is ${BASE_SHA}"
+
+          # On changed scope (i.e., check on PR), action outputs results in a text format into console
+          # and duplicates it into SARIF file with --sarif-output
+          # SARIF results will be uploaded into PR comments for public repos
+          # baseline-commit is used to trigger diff-aware scan
+          semgrep scan \
+            ${SEMGREP_SEVERITY} \
+            --error \
+            --text \
+            --sarif-output="${SARIF_FILE}" \
+            --timeout "$INPUTS_TIMEOUT" \
+            --metrics=off \
+            --baseline-commit "${BASE_SHA}" \
+
+          exit_code="$?"
+          echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
+          echo "report_path=${SARIF_FILE}" >> $GITHUB_OUTPUT
+
+        elif [[ "$INPUTS_SCAN_SCOPE" == "all" ]] ; then
+          echo "Running Semgrep on all files in $INPUTS_PATHS"
+
+          # Scan full scope and output results into workflow log and SARIF file
+          # For public repos SARIF results will be uploaded into Security tab
+          semgrep scan \
+            ${SEMGREP_SEVERITY} \
+            --error \
+            --text \
+            --sarif-output="${SARIF_FILE}" \
+            --timeout "$INPUTS_TIMEOUT" \
+            --metrics=off \
+            "$INPUTS_PATHS"
+          exit_code="$?"
+          echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
+          echo "report_path=${SARIF_FILE}" >> $GITHUB_OUTPUT
+
+          # Second scan to get output file in text or json format,
+          # if it is required by provided output-format (Semgrep can not do it in one go)
+          # Shall not take too much time due to Semgrep caching
+
+          if [[ "$INPUTS_OUTPUT_FORMAT" != "sarif" ]]; then
+              REPORT_FILE="security-results/semgrep/semgrep-results.$INPUTS_OUTPUT_FORMAT"
+              semgrep scan \
+                ${SEMGREP_SEVERITY} \
+                --error \
+                --timeout "$INPUTS_TIMEOUT" \
+                --"$INPUTS_OUTPUT_FORMAT" \
+                -o "${REPORT_FILE}" \
+                --metrics=off \
+                "$INPUTS_PATHS"
+              exit_code="$?"
+              echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
+              echo "report_path=${REPORT_FILE}" >> $GITHUB_OUTPUT
+            fi
+
         else
-          # Output is "text", so print to console (stdout)
-          # 'semgrep ci' does this by default, but --text makes it explicit.
-          OUTPUT_FLAGS="--text"
+          echo "No files to scan found"
         fi
 
-        # In a PR, it scans changed files. On 'main', it scans all files.
-        # It respects .semgrepignore.
-        semgrep ci \
-          ${SEMGREP_SEVERITY} \
-          --error \
-          --metrics=off \
-          --timeout "$INPUTS_TIMEOUT" \
-          ${OUTPUT_FLAGS}
-
-        exit_code="$?"
-        echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
-
-        if [[ "$INPUTS_FAIL_ON_FINDINGS" == "true" && -n "$exit_code" && "$exit_code" != "0" ]]; then
-          exit $exit_code
-        fi
-
-      # Upload results after full scope analysis
     - name: Upload reports
       if: hashFiles('security-results/semgrep/*') != '' # if any report is available
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -175,8 +203,28 @@ runs:
         name: semgrep-results
         path: security-results/semgrep
         retention-days: 7
-    - name: Upload sarif
-      if: hashFiles('security-results/semgrep/semgrep-results.sarif') != '' # if SARIF is available, upload it
+
+    - name: Upload reports in SARIF
+      # Upload report if SARIF file is available and repo is public
+      if: github.event.repository.private == false && hashFiles('security-results/semgrep/semgrep-results.sarif') != ''
       uses: github/codeql-action/upload-sarif@51f77329afa6477de8c49fc9c7046c15b9a4e79d # v3.29.5
       with:
         sarif_file: security-results/semgrep/semgrep-results.sarif
+
+    - name: Complete with exit code
+      shell: bash
+      env:
+        INPUTS_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+        EXIT_CODE: ${{ steps.run-semgrep.outputs.exit_code}}
+
+      run: |
+        # Respect INPUTS_FAIL_ON_FINDINGS only if exit code == 1
+        # Otherwise, use exit code to catch Semgrep internal issues
+        # https://semgrep.dev/docs/cli-reference#exit-codes
+
+        set +e
+        if [[ "$INPUTS_FAIL_ON_FINDINGS" == "false" && -n "$EXIT_CODE" && "$EXIT_CODE" == "1" ]]; then
+          exit 0
+        else
+          exit $EXIT_CODE
+        fi
