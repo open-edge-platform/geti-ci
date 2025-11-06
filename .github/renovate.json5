@@ -54,7 +54,7 @@
   // Is used to upgrade tools version
   customManagers: [
     {
-      fileMatch: ["^\\.github/actions/*/[^/]+\\.ya?ml$"],
+      fileMatch: ["^\\.github/actions/.*/[^/]+\\.ya?ml$"],
       //https://docs.renovatebot.com/modules/manager/regex/#advanced-capture
       matchStrings: [
         "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\s+.+default: (?<currentValue>.*)",
