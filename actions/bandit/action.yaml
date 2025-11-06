@@ -79,7 +79,7 @@ inputs:
     description: "bandit version"
     required: false
     # renovate: datasource=pypi depName=bandit
-    default: 1.8.5
+    default: 1.8.4
 
 outputs:
   scan_result:
