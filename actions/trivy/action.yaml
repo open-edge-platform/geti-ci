@@ -49,6 +49,10 @@ name: "Trivy Security Scanner"
 description: "Comprehensive security scanner for vulnerabilities, IaC issues, and secrets"
 
 inputs:
+  artifact-name:
+    description: "Artifact name"
+    required: false
+    default: "trivy-results"
   scan_type:
     description: "Type of scan to perform (fs/config/image/repo/rootfs)"
     required: false
@@ -228,7 +232,7 @@ runs:
       if: hashFiles('security-results/trivy/*') != '' # if any report is available
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
       with:
-        name: trivy-results
+        name: ${{ inputs.artifact-name }}
         path: security-results/trivy
         retention-days: 7
     - name: Upload sarif
