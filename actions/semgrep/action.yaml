@@ -148,12 +148,14 @@ runs:
 
           semgrep scan \
             ${SEMGREP_SEVERITY} \
+            --quiet \
             --error \
             --text \
             --sarif-output="${SARIF_FILE_ALL}" \
             --timeout "$INPUTS_TIMEOUT" \
             --metrics=off \
             --baseline-commit "${BASE_SHA}" \
+          
           cat "${SARIF_FILE_ALL}" | jq 'del(.runs[].results[] | select(.suppressions))' > "${SARIF_FILE}"
           rm "${SARIF_FILE_ALL}"
 
