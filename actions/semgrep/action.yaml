@@ -183,7 +183,6 @@ runs:
             | jq 'del(.runs[].results[] | select(.suppressions))' > "${SARIF_FILE}"
 
           # Second scan to get output file in text format,
-          # if it is required by provided output-format (Semgrep can not do it in one go)
           # Shall not take too much time due to Semgrep caching
           
           echo "Running Semgrep on all files in $INPUTS_PATHS with text output"
