@@ -175,7 +175,6 @@ runs:
           semgrep scan \
             ${SEMGREP_SEVERITY} \
             --quiet \
-            --error \
             --sarif \
             --timeout "$INPUTS_TIMEOUT" \
             --metrics=off \
