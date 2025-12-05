@@ -148,20 +148,18 @@ runs:
 
           semgrep scan \
             ${SEMGREP_SEVERITY} \
-            --quiet \
+            --sarif \
             --error \
-            --text \
-            --sarif-output="${SARIF_FILE_ALL}" \
             --timeout "$INPUTS_TIMEOUT" \
             --metrics=off \
-            --baseline-commit "${BASE_SHA}" \
+            --baseline-commit "${BASE_SHA}" > "${SARIF_FILE_ALL}"
           
           cat "${SARIF_FILE_ALL}" | jq 'del(.runs[].results[] | select(.suppressions))' > "${SARIF_FILE}"
           rm "${SARIF_FILE_ALL}"
 
           echo "Running Semgrep on changed scope with diff-aware scan with console output:"
           echo "baseline-commit is ${BASE_SHA}"
-          semgrep scan . \
+          semgrep scan \
             ${SEMGREP_SEVERITY} \
             --error \
             --text \
