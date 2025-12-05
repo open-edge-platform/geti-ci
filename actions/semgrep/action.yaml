@@ -133,6 +133,7 @@ runs:
         # Create results directory
         mkdir -p security-results/semgrep
 
+        SARIF_FILE_ALL="security-results/semgrep/semgrep-results-all.sarif"
         SARIF_FILE="security-results/semgrep/semgrep-results.sarif"
         TEXT_FILE="security-results/semgrep/semgrep-results.txt"
 
@@ -145,15 +146,16 @@ runs:
           # SARIF results will be uploaded into PR comments for public repos
           # baseline-commit is used to trigger diff-aware scan
 
-          semgrep scan . \
+          semgrep scan \
             ${SEMGREP_SEVERITY} \
-            --quiet \
-            --sarif \
+            --error \
+            --text \
+            --sarif-output="${SARIF_FILE_ALL}" \
             --timeout "$INPUTS_TIMEOUT" \
             --metrics=off \
-            --baseline-commit "${BASE_SHA}" 2>/dev/null \
-            | jq 'del(.runs[].results[] | select(.suppressions))' \
-            > "${SARIF_FILE}"
+            --baseline-commit "${BASE_SHA}" \
+          cat "${SARIF_FILE_ALL}" | jq 'del(.runs[].results[] | select(.suppressions))' > "${SARIF_FILE}"
+          rm "${SARIF_FILE_ALL}"
 
           echo "Running Semgrep on changed scope with diff-aware scan with console output:"
           echo "baseline-commit is ${BASE_SHA}"
