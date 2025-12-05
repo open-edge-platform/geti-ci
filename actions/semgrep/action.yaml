@@ -137,14 +137,14 @@ runs:
         TEXT_FILE="security-results/semgrep/semgrep-results.txt"
 
         if [[ "$INPUTS_SCAN_SCOPE" == "changed" ]]; then
-          echo "Running Semgrep on changed scope with diff-aware scan with SARIF output and quiet mode:"
-          echo "baseline-commit is ${BASE_SHA}"
 
           # On changed scope (i.e., check on PR), action outputs results in a text format into console
           # and duplicates it into SARIF file with post-processing (https://github.com/semgrep/semgrep/issues/6658)
           # SARIF results will be uploaded into PR comments for public repos
           # baseline-commit is used to trigger diff-aware scan
-
+          
+          echo "Running Semgrep on changed scope with diff-aware scan with SARIF output and quiet mode"
+          echo "baseline-commit is ${BASE_SHA}"
           semgrep scan \
             ${SEMGREP_SEVERITY} \
             --quiet \
@@ -154,19 +154,19 @@ runs:
             --metrics=off \
             --baseline-commit "${BASE_SHA}" \
             | jq 'del(.runs[].results[] | select(.suppressions))' > "${SARIF_FILE}"
+          echo "report_path=${SARIF_FILE}" >> $GITHUB_OUTPUT
 
-          echo "Running Semgrep on changed scope with diff-aware scan with console output:"
+          echo "Running Semgrep on changed scope with diff-aware scan with console output"
           echo "baseline-commit is ${BASE_SHA}"
           semgrep scan \
             ${SEMGREP_SEVERITY} \
             --error \
-            --text \
             --timeout "$INPUTS_TIMEOUT" \
             --metrics=off \
             --baseline-commit "${BASE_SHA}" \
           exit_code="$?"
           echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
-          echo "report_path=${SARIF_FILE}" >> $GITHUB_OUTPUT
+
 
         elif [[ "$INPUTS_SCAN_SCOPE" == "all" ]] ; then
           # Scan full scope and output results into workflow log and SARIF file
