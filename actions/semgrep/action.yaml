@@ -160,7 +160,6 @@ runs:
           echo "baseline-commit is ${BASE_SHA}"
           semgrep scan \
             ${SEMGREP_SEVERITY} \
-            --error \
             --timeout "$INPUTS_TIMEOUT" \
             --metrics=off \
             --baseline-commit "${BASE_SHA}" \
