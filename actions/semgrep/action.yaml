@@ -153,7 +153,7 @@ runs:
             --timeout "$INPUTS_TIMEOUT" \
             --metrics=off \
             --baseline-commit "${BASE_SHA}" \
-            > | jq 'del(.runs[].results[] | select(.suppressions))' > "${SARIF_FILE}"
+            | jq 'del(.runs[].results[] | select(.suppressions))' > "${SARIF_FILE}"
 
           echo "Running Semgrep on changed scope with diff-aware scan with console output:"
           echo "baseline-commit is ${BASE_SHA}"
