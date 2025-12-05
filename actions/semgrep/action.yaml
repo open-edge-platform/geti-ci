@@ -149,11 +149,19 @@ runs:
             ${SEMGREP_SEVERITY} \
             --quiet \
             --sarif \
-            --error \
             --timeout "$INPUTS_TIMEOUT" \
             --metrics=off \
             --baseline-commit "${BASE_SHA}" \
             | jq 'del(.runs[].results[] | select(.suppressions))' > "${SARIF_FILE}"
+          
+          echo "Running Semgrep on changed scope with diff-aware scan with console output and error return code"
+          echo "baseline-commit is ${BASE_SHA}"
+          semgrep scan \
+            ${SEMGREP_SEVERITY} \
+            --error \
+            --timeout "$INPUTS_TIMEOUT" \
+            --metrics=off \
+            --baseline-commit "${BASE_SHA}"
           exit_code="$?"
           echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
           echo "report_path=${SARIF_FILE}" >> $GITHUB_OUTPUT
