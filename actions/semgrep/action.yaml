@@ -156,16 +156,6 @@ runs:
             | jq 'del(.runs[].results[] | select(.suppressions))' > "${SARIF_FILE}"
           echo "report_path=${SARIF_FILE}" >> $GITHUB_OUTPUT
 
-          echo "Running Semgrep on changed scope with diff-aware scan with console output"
-          echo "baseline-commit is ${BASE_SHA}"
-          semgrep scan \
-            ${SEMGREP_SEVERITY} \
-            --timeout "$INPUTS_TIMEOUT" \
-            --metrics=off \
-            --baseline-commit "${BASE_SHA}" \
-          exit_code="$?"
-          echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
-
 
         elif [[ "$INPUTS_SCAN_SCOPE" == "all" ]] ; then
           # Scan full scope and output results into workflow log and SARIF file
