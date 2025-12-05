@@ -148,6 +148,7 @@ runs:
 
           semgrep scan \
             ${SEMGREP_SEVERITY} \
+            --quiet \
             --sarif \
             --error \
             --timeout "$INPUTS_TIMEOUT" \
