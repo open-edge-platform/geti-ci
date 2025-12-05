@@ -145,7 +145,7 @@ runs:
           # SARIF results will be uploaded into PR comments for public repos
           # baseline-commit is used to trigger diff-aware scan
 
-          semgrep scan \
+          semgrep scan . \
             ${SEMGREP_SEVERITY} \
             --quiet \
             --sarif \
@@ -157,7 +157,7 @@ runs:
 
           echo "Running Semgrep on changed scope with diff-aware scan with console output:"
           echo "baseline-commit is ${BASE_SHA}"
-          semgrep scan \
+          semgrep scan . \
             ${SEMGREP_SEVERITY} \
             --error \
             --text \
@@ -169,11 +169,10 @@ runs:
           echo "report_path=${SARIF_FILE}" >> $GITHUB_OUTPUT
 
         elif [[ "$INPUTS_SCAN_SCOPE" == "all" ]] ; then
-          echo "Running Semgrep on all files in $INPUTS_PATHS with SARIF output and quiet mode"
-
           # Scan full scope and output results into workflow log and SARIF file
           # For public repos SARIF results will be uploaded into Security tab
-
+          
+          echo "Running Semgrep on all files in $INPUTS_PATHS with SARIF output and quiet mode"
           semgrep scan \
             ${SEMGREP_SEVERITY} \
             --quiet \
@@ -188,6 +187,7 @@ runs:
           # Second scan to get output file in text format,
           # if it is required by provided output-format (Semgrep can not do it in one go)
           # Shall not take too much time due to Semgrep caching
+          
           echo "Running Semgrep on all files in $INPUTS_PATHS with text output"
           semgrep scan \
             ${SEMGREP_SEVERITY} \
