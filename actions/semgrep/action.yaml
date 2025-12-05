@@ -134,24 +134,35 @@ runs:
         mkdir -p security-results/semgrep
 
         SARIF_FILE="security-results/semgrep/semgrep-results.sarif"
+        TEXT_FILE="security-results/semgrep/semgrep-results.txt"
 
         if [[ "$INPUTS_SCAN_SCOPE" == "changed" ]]; then
           echo "Running Semgrep on changed scope with diff-aware scan:"
           echo "baseline-commit is ${BASE_SHA}"
 
           # On changed scope (i.e., check on PR), action outputs results in a text format into console
-          # and duplicates it into SARIF file with --sarif-output
+          # and duplicates it into SARIF file with post-processing (https://github.com/semgrep/semgrep/issues/6658)
           # SARIF results will be uploaded into PR comments for public repos
           # baseline-commit is used to trigger diff-aware scan
+         
+          semgrep scan \
+            ${SEMGREP_SEVERITY} \
+            --quiet \
+            --error \
+            --sarif \
+            --timeout "$INPUTS_TIMEOUT" \
+            --metrics=off \
+            --baseline-commit "${BASE_SHA}" 2>/dev/null \
+            | jq 'del(.runs[].results[] | select(.suppressions))' \
+            > "${SARIF_FILE}"
+
           semgrep scan \
             ${SEMGREP_SEVERITY} \
             --error \
             --text \
-            --sarif-output="${SARIF_FILE}" \
             --timeout "$INPUTS_TIMEOUT" \
             --metrics=off \
             --baseline-commit "${BASE_SHA}" \
-
           exit_code="$?"
           echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
           echo "report_path=${SARIF_FILE}" >> $GITHUB_OUTPUT
@@ -161,36 +172,34 @@ runs:
 
           # Scan full scope and output results into workflow log and SARIF file
           # For public repos SARIF results will be uploaded into Security tab
+
+          semgrep scan \
+            ${SEMGREP_SEVERITY} \
+            --quiet \
+            --error \
+            --sarif \
+            --timeout "$INPUTS_TIMEOUT" \
+            --metrics=off \
+            "$INPUTS_PATHS" 2>/dev/null \
+            | jq 'del(.runs[].results[] | select(.suppressions))' \
+            > "${SARIF_FILE}"
+
+
+
+          # Second scan to get output file in text format,
+          # if it is required by provided output-format (Semgrep can not do it in one go)
+          # Shall not take too much time due to Semgrep caching
           semgrep scan \
             ${SEMGREP_SEVERITY} \
             --error \
             --text \
-            --sarif-output="${SARIF_FILE}" \
+            -o "${TEXT_FILE}" \
             --timeout "$INPUTS_TIMEOUT" \
             --metrics=off \
             "$INPUTS_PATHS"
           exit_code="$?"
           echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
           echo "report_path=${SARIF_FILE}" >> $GITHUB_OUTPUT
-
-          # Second scan to get output file in text or json format,
-          # if it is required by provided output-format (Semgrep can not do it in one go)
-          # Shall not take too much time due to Semgrep caching
-
-          if [[ "$INPUTS_OUTPUT_FORMAT" != "sarif" ]]; then
-              REPORT_FILE="security-results/semgrep/semgrep-results.$INPUTS_OUTPUT_FORMAT"
-              semgrep scan \
-                ${SEMGREP_SEVERITY} \
-                --error \
-                --timeout "$INPUTS_TIMEOUT" \
-                --"$INPUTS_OUTPUT_FORMAT" \
-                -o "${REPORT_FILE}" \
-                --metrics=off \
-                "$INPUTS_PATHS"
-              exit_code="$?"
-              echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
-              echo "report_path=${REPORT_FILE}" >> $GITHUB_OUTPUT
-            fi
 
         else
           echo "No files to scan found"
