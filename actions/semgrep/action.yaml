@@ -154,6 +154,8 @@ runs:
             --metrics=off \
             --baseline-commit "${BASE_SHA}" \
             | jq 'del(.runs[].results[] | select(.suppressions))' > "${SARIF_FILE}"
+          exit_code="$?"
+          echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
           echo "report_path=${SARIF_FILE}" >> $GITHUB_OUTPUT
 
 
