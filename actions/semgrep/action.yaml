@@ -139,7 +139,7 @@ runs:
         if [[ "$INPUTS_SCAN_SCOPE" == "changed" ]]; then
 
           # On changed scope (i.e., check on PR), action outputs results in a text format into console
-          # and duplicates it into SARIF file with post-processing (https://github.com/semgrep/semgrep/issues/6658)
+          # and duplicates it into SARIF file with post-processing to remove suppressed findings (https://github.com/semgrep/semgrep/issues/6658)
           # SARIF results will be uploaded into PR comments for public repos
           # baseline-commit is used to trigger diff-aware scan
           
@@ -179,9 +179,8 @@ runs:
             --sarif \
             --timeout "$INPUTS_TIMEOUT" \
             --metrics=off \
-            "$INPUTS_PATHS" 2>/dev/null \
-            | jq 'del(.runs[].results[] | select(.suppressions))' \
-            > "${SARIF_FILE}"
+            "$INPUTS_PATHS" \
+            | jq 'del(.runs[].results[] | select(.suppressions))' > "${SARIF_FILE}"
 
           # Second scan to get output file in text format,
           # if it is required by provided output-format (Semgrep can not do it in one go)
