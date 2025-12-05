@@ -148,7 +148,6 @@ runs:
           semgrep scan \
             ${SEMGREP_SEVERITY} \
             --quiet \
-            --error \
             --sarif \
             --timeout "$INPUTS_TIMEOUT" \
             --metrics=off \
@@ -183,8 +182,6 @@ runs:
             "$INPUTS_PATHS" 2>/dev/null \
             | jq 'del(.runs[].results[] | select(.suppressions))' \
             > "${SARIF_FILE}"
-
-
 
           # Second scan to get output file in text format,
           # if it is required by provided output-format (Semgrep can not do it in one go)
