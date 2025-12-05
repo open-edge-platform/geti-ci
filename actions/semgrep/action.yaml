@@ -137,14 +137,14 @@ runs:
         TEXT_FILE="security-results/semgrep/semgrep-results.txt"
 
         if [[ "$INPUTS_SCAN_SCOPE" == "changed" ]]; then
-          echo "Running Semgrep on changed scope with diff-aware scan:"
+          echo "Running Semgrep on changed scope with diff-aware scan with SARIF output and quiet mode:"
           echo "baseline-commit is ${BASE_SHA}"
 
           # On changed scope (i.e., check on PR), action outputs results in a text format into console
           # and duplicates it into SARIF file with post-processing (https://github.com/semgrep/semgrep/issues/6658)
           # SARIF results will be uploaded into PR comments for public repos
           # baseline-commit is used to trigger diff-aware scan
-         
+
           semgrep scan \
             ${SEMGREP_SEVERITY} \
             --quiet \
@@ -155,6 +155,8 @@ runs:
             | jq 'del(.runs[].results[] | select(.suppressions))' \
             > "${SARIF_FILE}"
 
+          echo "Running Semgrep on changed scope with diff-aware scan with console output:"
+          echo "baseline-commit is ${BASE_SHA}"
           semgrep scan \
             ${SEMGREP_SEVERITY} \
             --error \
@@ -167,7 +169,7 @@ runs:
           echo "report_path=${SARIF_FILE}" >> $GITHUB_OUTPUT
 
         elif [[ "$INPUTS_SCAN_SCOPE" == "all" ]] ; then
-          echo "Running Semgrep on all files in $INPUTS_PATHS"
+          echo "Running Semgrep on all files in $INPUTS_PATHS with SARIF output and quiet mode"
 
           # Scan full scope and output results into workflow log and SARIF file
           # For public repos SARIF results will be uploaded into Security tab
@@ -186,6 +188,7 @@ runs:
           # Second scan to get output file in text format,
           # if it is required by provided output-format (Semgrep can not do it in one go)
           # Shall not take too much time due to Semgrep caching
+          echo "Running Semgrep on all files in $INPUTS_PATHS with text output"
           semgrep scan \
             ${SEMGREP_SEVERITY} \
             --error \
