@@ -101,7 +101,7 @@ inputs:
     description: "Trivy version"
     required: false
     # renovate: datasource=github-releases depName=aquasecurity/trivy
-    default: v0.67.2
+    default: v0.68.1
 
 outputs:
   scan_result:
