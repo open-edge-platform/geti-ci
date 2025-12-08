@@ -145,6 +145,10 @@ runs:
           
           echo "Running Semgrep on changed scope with diff-aware scan with SARIF output and quiet mode"
           echo "baseline-commit is ${BASE_SHA}"
+          
+          # First run is to produce report in SARIF
+          # --error is not used here to avoid false positives because of https://github.com/semgrep/semgrep/issues/6658
+          # semgrep output is post-processed with jq to remove all suppressed findings from the SARIF uploaded into PR comments
           semgrep scan \
             ${SEMGREP_SEVERITY} \
             --quiet \
@@ -156,6 +160,9 @@ runs:
           
           echo "Running Semgrep on changed scope with diff-aware scan with console output and error return code"
           echo "baseline-commit is ${BASE_SHA}"
+          
+          # Second run with --error to break CI on PR if necessary
+          # Shall not take too much time due to Semgrep caching
           semgrep scan \
             ${SEMGREP_SEVERITY} \
             --error \
@@ -172,6 +179,10 @@ runs:
           # For public repos SARIF results will be uploaded into Security tab
           
           echo "Running Semgrep on all files in $INPUTS_PATHS with SARIF output and quiet mode"
+          
+          # First run is to produce report in SARIF
+          # --error is not used here to avoid false positives because of https://github.com/semgrep/semgrep/issues/6658
+          # semgrep output is post-processed with jq to remove all suppressed findings from the SARIF
           semgrep scan \
             ${SEMGREP_SEVERITY} \
             --quiet \
@@ -181,9 +192,8 @@ runs:
             "$INPUTS_PATHS" \
             | jq 'del(.runs[].results[] | select(.suppressions))' > "${SARIF_FILE}"
 
-          # Second scan to get output file in text format,
+          # Second scan to get output file in text format
           # Shall not take too much time due to Semgrep caching
-          
           echo "Running Semgrep on all files in $INPUTS_PATHS with text output"
           semgrep scan \
             ${SEMGREP_SEVERITY} \
