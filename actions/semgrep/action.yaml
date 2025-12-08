@@ -142,10 +142,10 @@ runs:
           # and duplicates it into SARIF file with post-processing to remove suppressed findings (https://github.com/semgrep/semgrep/issues/6658)
           # SARIF results will be uploaded into PR comments for public repos
           # baseline-commit is used to trigger diff-aware scan
-          
+
           echo "Running Semgrep on changed scope with diff-aware scan with SARIF output and quiet mode"
           echo "baseline-commit is ${BASE_SHA}"
-          
+
           # First run is to produce report in SARIF
           # --error is not used here to avoid false positives because of https://github.com/semgrep/semgrep/issues/6658
           # semgrep output is post-processed with jq to remove all suppressed findings from the SARIF uploaded into PR comments
@@ -157,10 +157,10 @@ runs:
             --metrics=off \
             --baseline-commit "${BASE_SHA}" \
             | jq 'del(.runs[].results[] | select(.suppressions))' > "${SARIF_FILE}"
-          
+
           echo "Running Semgrep on changed scope with diff-aware scan with console output and error return code"
           echo "baseline-commit is ${BASE_SHA}"
-          
+
           # Second run with --error to break CI on PR if necessary
           # Shall not take too much time due to Semgrep caching
           semgrep scan \
@@ -177,9 +177,9 @@ runs:
         elif [[ "$INPUTS_SCAN_SCOPE" == "all" ]] ; then
           # Scan full scope and output results into workflow log and SARIF file
           # For public repos SARIF results will be uploaded into Security tab
-          
+
           echo "Running Semgrep on all files in $INPUTS_PATHS with SARIF output and quiet mode"
-          
+
           # First run is to produce report in SARIF
           # --error is not used here to avoid false positives because of https://github.com/semgrep/semgrep/issues/6658
           # semgrep output is post-processed with jq to remove all suppressed findings from the SARIF
