@@ -1,0 +1,83 @@
+name: 'Sign Docker Image'
+description: 'Signs a Docker image in registry using Cosign with keyless signing'
+inputs:
+  image-uri:
+    description: 'Container image URI (repository, name and tag) (e.g. ghcr.io/org/image:tag)'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install Cosign
+      uses: sigstore/cosign-installer@faadad0cce49287aee09b3a48701e75088a2c6ad # v4.0.0
+
+    - name: Install Crane
+      shell: bash
+      run: |
+        set -euo pipefail
+        VERSION=v0.20.6
+        OS=Linux
+        ARCH=x86_64
+        BASE_URL="https://github.com/google/go-containerregistry/releases/download/${VERSION}"
+        curl -sL "${BASE_URL}/go-containerregistry_${OS}_${ARCH}.tar.gz" > go-containerregistry_${OS}_${ARCH}.tar.gz
+        curl -sL "${BASE_URL}/checksums.txt" | grep -E " go-containerregistry_${OS}_${ARCH}\\.tar\\.gz$" > checkSum.txt
+        if [ -s checkSum.txt ]; then
+          sha256sum -c checkSum.txt
+        else
+          echo "Checksum file not found or empty"
+          exit 1
+        fi
+        tar -zxvf go-containerregistry_${OS}_${ARCH}.tar.gz -C /usr/local/bin/ crane
+        echo "Crane $(crane version) installed successfully"
+
+    - name: Get image digest from registry
+      id: get-digest
+      shell: bash
+      env:
+        IMAGE: ${{ inputs.image-uri }}
+      run: |
+        set -euo pipefail
+        if [ -z "$IMAGE" ]; then
+          echo "IMAGE is not set" >&2
+          exit 1
+        fi
+
+        # Get digest from registry using crane
+        DIGEST=$(crane digest "${IMAGE}" | tr -d '\n\r')
+        echo "Digest for ${IMAGE} is ${DIGEST}"
+
+        # Validate digest format
+        if ! echo "${DIGEST}" | grep -Eq '^sha256:[a-f0-9]{64}$'; then
+          echo "Invalid digest format: ${DIGEST}" >&2
+          exit 1
+        fi
+        echo "digest=${DIGEST}" >> $GITHUB_OUTPUT
+
+    - name: Sign the image with GitHub OIDC Token (keyless mode)
+      shell: bash
+      env:
+        DIGEST: ${{ steps.get-digest.outputs.digest }}
+        IMAGE: ${{ inputs.image-uri }}
+      run: |
+        set -euo pipefail
+        echo "Signing ${IMAGE}@${DIGEST}"
+        echo "Cosign version: $(cosign version)"
+        cosign sign --yes --oidc-provider=github-actions "${IMAGE}@${DIGEST}"
+
+    - name: Verify the signature
+      shell: bash
+      env:
+        DIGEST: ${{ steps.get-digest.outputs.digest }}
+        IMAGE: ${{ inputs.image-uri }}
+        WORKFLOW_PATH: ${{ github.workflow_ref }}
+      run: |
+        set -euo pipefail
+        echo "Verifying signature for ${IMAGE}@${DIGEST}"
+        echo "Certificate identity: https://github.com/${WORKFLOW_PATH}"
+        echo "OIDC Issuer: https://token.actions.githubusercontent.com"
+        cosign verify \
+          --certificate-identity="https://github.com/${WORKFLOW_PATH}" \
+          --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
+          "${IMAGE}@${DIGEST}"
+
+        echo "Signature verified successfully!"
