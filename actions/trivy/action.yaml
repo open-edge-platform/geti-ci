@@ -102,6 +102,10 @@ inputs:
     required: false
     # renovate: datasource=github-releases depName=aquasecurity/trivy
     default: v0.68.1
+  config_path:
+    description: "Path to Trivy configuration file"
+    required: false
+    default: ""
 
 outputs:
   scan_result:
@@ -154,6 +158,7 @@ runs:
         INPUTS_TIMEOUT: ${{ inputs.timeout }}
         INPUTS_GENERATE_SBOM: ${{ inputs.generate_sbom }}
         INPUTS_SBOM_FORMAT: ${{ inputs.sbom_format }}
+        INPUTS_CONFIG_PATH: ${{ inputs.config_path }}
         INPUTS_ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
       run: |
         # Map provided severity levels to Trivy levels
@@ -195,6 +200,11 @@ runs:
         --format $INPUTS_FORMAT \
         --output ${REPORT_FILE} \
         --timeout $INPUTS_TIMEOUT"
+
+        # Add path to custom config
+        if [[ -n "$INPUTS_CONFIG_PATH" ]]; then
+          CMD="$CMD --config $INPUTS_CONFIG_PATH"
+        fi
 
         # Add scanner-specific flags based on scan type
         if [[ "$INPUTS_SCAN_TYPE" == "config" ]]; then
