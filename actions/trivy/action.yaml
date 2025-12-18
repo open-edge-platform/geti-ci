@@ -196,18 +196,21 @@ runs:
 
         # Build the base command
         CMD="trivy --cache-dir ~/.cache/trivy $INPUTS_SCAN_TYPE \
-        --severity $TRIVY_SEVERITY \
         --format $INPUTS_FORMAT \
         --output ${REPORT_FILE} \
         --timeout $INPUTS_TIMEOUT"
 
-        # Add path to custom config
+        # Add scanner-specific flags based on scan type
         if [[ -n "$INPUTS_CONFIG_PATH" ]]; then
+          # Use custom config file if provided
           CMD="$CMD --config $INPUTS_CONFIG_PATH"
+        else
+          # Add severity flag only when not using custom config
+          CMD="$CMD --severity $TRIVY_SEVERITY"
         fi
 
-        # Add scanner-specific flags based on scan type
-        if [[ "$INPUTS_SCAN_TYPE" == "config" ]]; then
+        # Add path to custom config
+        if [[ "$INPUTS_SCAN_TYPE" == "config" && -z "$INPUTS_CONFIG_PATH" ]]; then
           # For config scans, use all default misconfig scanners or specified ones
           CMD="$CMD --misconfig-scanners $INPUTS_MISCONFIG_SCANNERS"
         elif [[ "$INPUTS_SCAN_TYPE" == "fs" || "$INPUTS_SCAN_TYPE" == "image" ]]; then
@@ -217,6 +220,7 @@ runs:
 
         # Add the scan target and execute
         CMD="$CMD ${SCAN_TARGET}"
+
         echo "Executing command: $CMD"
         eval $CMD || echo "::warning::Trivy scan completed with findings"
 
