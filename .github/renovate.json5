@@ -49,6 +49,16 @@
       matchDepNames: ["python"],
       matchDepTypes: ["uses-with"],
     },
+
+    // Group tools updates
+    {
+      enabled: true,
+      separateMajorMinor: false,
+      groupName: "Tools",
+      matchManagers: ["custom.regex"],
+      matchPackagePatterns: ["*"],
+      schedule: ["* * 1 * *"], // every month
+    },
   ],
 
   // Is used to upgrade tools version
