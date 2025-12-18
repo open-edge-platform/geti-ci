@@ -101,7 +101,7 @@ inputs:
     description: "Trivy version"
     required: false
     # renovate: datasource=github-releases depName=aquasecurity/trivy
-    default: v0.68.1
+    default: v0.68.2
   config_path:
     description: "Path to Trivy configuration file"
     required: false
