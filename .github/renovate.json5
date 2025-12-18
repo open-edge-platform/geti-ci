@@ -54,7 +54,7 @@
     {
       enabled: true,
       separateMajorMinor: false,
-      groupName: "Tools upgrade",
+      groupName: "Tools",
       matchManagers: ["custom.regex"],
       matchPackagePatterns: ["*"],
       schedule: ["* * 1 * *"], // every month
