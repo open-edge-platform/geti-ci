@@ -180,10 +180,10 @@ runs:
         jq '
           .runs[0].results |= map(
             .level = (
-              if .properties.level == "info" then "low"
-              elif .properties.level == "warning" then "medium"
-              elif .properties.level == "error" then "high"
-              else "none"
+              if .level == "info" then "low"
+              elif .level == "warning" then "medium"
+              elif .level == "error" then "high"
+              else .level
               end
             )
           )
@@ -215,12 +215,12 @@ runs:
         EXIT_CODE: ${{ steps.run-zizmor.outputs.exit_code}}
 
       run: |
-        # Respect INPUTS_FAIL_ON_FINDINGS only if exit code == 1
+        # Respect INPUTS_FAIL_ON_FINDINGS only if exit code == 1 or > 10
         # Otherwise, use exit code to catch Zizmor internal issues
         # https://docs.zizmor.sh/usage/#exit-codes
 
         set +e
-        if [[ "$INPUTS_FAIL_ON_FINDINGS" == "false" && -n "$EXIT_CODE" && "$EXIT_CODE" == "1" ]]; then
+        if [[ "$INPUTS_FAIL_ON_FINDINGS" == "false" && -n "$EXIT_CODE" && ("$EXIT_CODE" == "1" || "$EXIT_CODE" -gt 10) ]]; then
           exit 0
         elif [[ -n "$EXIT_CODE" ]]; then
           exit $EXIT_CODE
