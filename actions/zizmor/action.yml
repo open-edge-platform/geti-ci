@@ -163,7 +163,7 @@ runs:
         else
           echo "No files to scan found"
         fi
-
+    # TODO: explain this block
     - name: Add SARIF security-severity to properties
       if: hashFiles('zizmor-report.sarif') != ''
       shell: bash
@@ -192,19 +192,9 @@ runs:
         retention-days: 7
 
     - name: Upload sarif
-      # if SARIF is available, upload it considering that for private repos Advanced Security subscription is n/a and
+      # if SARIF is available, upload it considering that for private repos Advanced Security subscription is n/a
       # PR from fork does not have access to security-events: write token
-      if: |-
-        ( 
-          github.event_name != 'pull_request' &&
-          github.event.repository.private == false && 
-          hashFiles('zizmor-report.sarif') != ''
-        ) || (
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.fork == false &&
-          github.event.repository.private == false && 
-          hashFiles('zizmor-report.sarif') != ''
-        )
+      if: github.event.repository.private == false && hashFiles('zizmor-report.sarif') != ''
       uses: github/codeql-action/upload-sarif@fdbfb4d2750291e159f0156def62b853c2798ca2 # v4.31.5
       with:
         sarif_file: zizmor-report.sarif
