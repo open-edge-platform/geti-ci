@@ -42,7 +42,7 @@ inputs:
   output-format:
     description: "Format for scan results (plain/json/sarif)"
     required: false
-    default: "sarif" # by default to upload into Security tab
+    default: "plain" # use plain by default
   fail-on-findings:
     description: "Whether to fail the action if issues are found"
     required: false
@@ -52,7 +52,7 @@ inputs:
     description: "Zizmor version"
     required: false
     # renovate: datasource=github-releases depName=zizmorcore/zizmor
-    default: v1.18.0
+    default: v1.19.0
 
 outputs:
   scan_result:
@@ -172,6 +172,23 @@ runs:
         name: zizmor-results
         path: zizmor-report.*
         retention-days: 7
+
+    - name: Update SARIF severity levels
+      if: hashFiles('zizmor-report.sarif') != ''
+      shell: bash
+      run: |
+        jq '
+          .runs[0].results |= map(
+            .level = (
+              if .properties.level == "info" then "low"
+              elif .properties.level == "warning" then "medium"
+              elif .properties.level == "error" then "high"
+              else "none"
+              end
+            )
+          )
+        ' zizmor-report.sarif > fixed-report.sarif
+        mv fixed-report.sarif zizmor-report.sarif
 
     - name: Upload sarif
       # if SARIF is available, upload it considering that for private repos Advanced Security subscription is n/a and
