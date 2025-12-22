@@ -164,6 +164,24 @@ runs:
           echo "No files to scan found"
         fi
 
+    - name: Add SARIF security-severity to properties
+      if: hashFiles('zizmor-report.sarif') != ''
+      shell: bash
+      run: |
+        jq '
+          .runs[0].results |= map(
+            .properties["security-severity"] = (
+              if .level == "error" then "8.0"
+              elif .level == "warning" then "5.0"
+              elif .level == "note" then "3.0"
+              elif .level == "none" then "0.0"
+              else null
+              end
+            )
+          )
+        ' zizmor-report.sarif > fixed-report.sarif
+        mv fixed-report.sarif zizmor-report.sarif
+
       # Upload results after full scope analysis
     - name: Upload reports
       if: hashFiles('zizmor-report.*') != '' # if any report is available
@@ -172,23 +190,6 @@ runs:
         name: zizmor-results
         path: zizmor-report.*
         retention-days: 7
-
-    - name: Update SARIF severity levels
-      if: hashFiles('zizmor-report.sarif') != ''
-      shell: bash
-      run: |
-        jq '
-          .runs[0].results |= map(
-            .level = (
-              if .level == "info" then "low"
-              elif .level == "warning" then "medium"
-              elif .level == "error" then "high"
-              else .level
-              end
-            )
-          )
-        ' zizmor-report.sarif > fixed-report.sarif
-        mv fixed-report.sarif zizmor-report.sarif
 
     - name: Upload sarif
       # if SARIF is available, upload it considering that for private repos Advanced Security subscription is n/a and
