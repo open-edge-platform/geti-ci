@@ -18,7 +18,7 @@
 #          fail-on-findings: true
 #
 # If necessary, put zizmor configuration into default location .github/zizmor.yml"
-# zizmor will discover and us it
+# zizmor will discover and use it
 
 name: "Zizmor Security Scan"
 description: "Runs Zizmor with configurable options"
@@ -100,6 +100,7 @@ runs:
 
       run: |
         set +e
+        SARIF_FILE="zizmor-report.sarif"
         REPORT_FILE="zizmor-report.$INPUTS_OUTPUT_FORMAT"
 
         # Convert severity and confidence to lowercase
@@ -109,31 +110,58 @@ runs:
         if [[ "$INPUTS_SCAN_SCOPE" == "changed" && -n "$INPUTS_ALL_CHANGED_FILES" ]]; then
           echo "There are some changes detected in yaml/yml, checking with Zizmor"
           echo "Changed files: ${INPUTS_ALL_CHANGED_FILES}"
+
+          # First run is to produce output in SARIF format
+          
           uvx zizmor=="$ZIZMOR_VERSION" \
-              --min-confidence ${CONFIDENCE} \
-              --min-severity ${SEVERITY} \
+              --min-confidence "${CONFIDENCE}" \
+              --min-severity "${SEVERITY}" \
+              --quiet \
+              --format sarif \
+              . \
+              > "$SARIF_FILE"          
+          
+          # Second run is to produce plain report and output into workflow log
+          # This is necessary for private repos that may not have Advanced Security subscription
+          # And therefore, SARIF upload can not be used
+          # Also when using --format=sarif, zizmor does not use its exit codes to signal the presence of findings
+          # As a result, zizmor will always exit with code 0 even if findings are present, that is why we need this run to break CI, if required
+          # https://docs.zizmor.sh/integrations/#manual-integration
+
+          uvx zizmor=="$ZIZMOR_VERSION" \
+              --min-confidence "${CONFIDENCE}" \
+              --min-severity "${SEVERITY}" \
+               --format plain \
               .
           exit_code="$?"
           echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
 
         elif [[ "$INPUTS_SCAN_SCOPE" == "all" ]] ; then
           echo "Running Zizmor on all files in $INPUTS_PATHS"
+          
+          # First run to produce SARIF for upload into Security tab
           uvx zizmor=="$ZIZMOR_VERSION" \
-              --min-confidence ${CONFIDENCE} \
-              --min-severity ${SEVERITY} \
+              --min-confidence "${CONFIDENCE}" \
+              --min-severity "${SEVERITY}" \
+              --quiet \
+              --format sarif \
+              "$INPUTS_PATHS" \
+              > "$SARIF_FILE"
+
+          # Second run to produce plain/json report
+          # This is required for private repos that may not have Advanced Security subscription
+          uvx zizmor=="$ZIZMOR_VERSION" \
+              --min-confidence "${CONFIDENCE}" \
+              --min-severity "${SEVERITY}" \
               --format "$INPUTS_OUTPUT_FORMAT" \
               "$INPUTS_PATHS" \
               > "$REPORT_FILE"
-
           exit_code="$?"
           echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
-          echo "report_path=${REPORT_FILE}" >> $GITHUB_OUTPUT
+          echo "report_path=${REPORT_FILE}" >> $GITHUB_OUTPUT       
+
         else
           echo "No files to scan found"
-        fi
-
-        if [[ "$INPUTS_FAIL_ON_FINDINGS" == "true" && -n "$exit_code" && "$exit_code" != "0" ]]; then
-          exit $exit_code
         fi
 
       # Upload results after full scope analysis
@@ -144,8 +172,41 @@ runs:
         name: zizmor-results
         path: zizmor-report.*
         retention-days: 7
+
     - name: Upload sarif
-      if: hashFiles('zizmor-report.sarif') != '' # if SARIF is available, upload it
+      # if SARIF is available, upload it considering that for private repos Advanced Security subscription is n/a and
+      # PR from fork does not have access to security-events: write token
+      if: |-
+        ( 
+          github.event_name != 'pull_request' &&
+          github.event.repository.private == false && 
+          hashFiles('zizmor-report.sarif') != ''
+        ) || (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.fork == false &&
+          github.event.repository.private == false && 
+          hashFiles('zizmor-report.sarif') != ''
+        )
       uses: github/codeql-action/upload-sarif@fdbfb4d2750291e159f0156def62b853c2798ca2 # v4.31.5
       with:
         sarif_file: zizmor-report.sarif
+
+    - name: Complete with exit code
+      shell: bash
+      env:
+        INPUTS_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+        EXIT_CODE: ${{ steps.run-zizmor.outputs.exit_code}}
+
+      run: |
+        # Respect INPUTS_FAIL_ON_FINDINGS only if exit code == 1
+        # Otherwise, use exit code to catch Zizmor internal issues
+        # https://docs.zizmor.sh/usage/#exit-codes
+
+        set +e
+        if [[ "$INPUTS_FAIL_ON_FINDINGS" == "false" && -n "$EXIT_CODE" && "$EXIT_CODE" == "1" ]]; then
+          exit 0
+        elif [[ -n "$EXIT_CODE" ]]; then
+          exit $EXIT_CODE
+        else
+          echo "No exit_code"
+        fi
