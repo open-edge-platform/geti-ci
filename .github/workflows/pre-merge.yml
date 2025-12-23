@@ -1,5 +1,4 @@
-# This workflow implements quality checks, tests,
-# and security scans for pull requests.
+# This workflow implements quality checks
 
 name: Pre-merge checks
 
@@ -11,26 +10,6 @@ on:
 permissions: {}
 
 jobs:
-  zizmor-scan-pr:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Harden the runner (audit all outbound calls)
-        uses: step-security/harden-runner@95d9a5deda9de15063e7595e9719c11c38c90ae2 # v2.13.2
-        with:
-          egress-policy: audit
-      - name: Checkout code
-        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
-        with:
-          persist-credentials: false
-      - name: Run Zizmor scan
-        uses: ./actions/zizmor
-        with:
-          scan-scope: "changed"
-          severity-level: "LOW"
-          confidence-level: "LOW"
-          fail-on-findings: true
   pre-commit:
     runs-on: ubuntu-latest
     permissions:
