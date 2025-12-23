@@ -136,15 +136,15 @@ runs:
           echo "Changed files: ${INPUTS_ALL_CHANGED_FILES}"
 
           # First run is to produce output in SARIF format
-          
+
           uvx zizmor=="$ZIZMOR_VERSION" \
               --min-confidence "${CONFIDENCE}" \
               --min-severity "${SEVERITY}" \
               --quiet \
               --format sarif \
               . \
-              > "$SARIF_FILE"          
-          
+              > "$SARIF_FILE"
+
           # Second run is to produce plain report and output into workflow log
           # This is necessary for private repos that may not have Advanced Security subscription
           # And therefore, SARIF upload can not be used
@@ -162,7 +162,7 @@ runs:
 
         elif [[ "$INPUTS_SCAN_SCOPE" == "all" ]] ; then
           echo "Running Zizmor on all files in $INPUTS_PATHS"
-          
+
           # First run to produce SARIF for upload into Security tab
           uvx zizmor=="$ZIZMOR_VERSION" \
               --min-confidence "${CONFIDENCE}" \
@@ -182,7 +182,7 @@ runs:
               > "$REPORT_FILE"
           exit_code="$?"
           echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
-          echo "report_path=${REPORT_FILE}" >> $GITHUB_OUTPUT       
+          echo "report_path=${REPORT_FILE}" >> $GITHUB_OUTPUT
 
         else
           echo "No files to scan found"
