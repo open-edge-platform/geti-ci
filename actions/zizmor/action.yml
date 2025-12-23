@@ -1,6 +1,6 @@
 # Zizmor Scanner Action
 #
-# This composite action executes GitHub Actions workflows scanning using zizmor,
+# This composite action executes GitHub Actions workflows scanning using Zizmor,
 # providing configurable security analysis capabilities.
 #
 # Example Usage:
@@ -81,6 +81,7 @@ runs:
         files: |
           **/*.yaml
           **/*.yml
+
     - name: Run Zizmor
       id: run-zizmor
       shell: bash
@@ -163,6 +164,7 @@ runs:
         else
           echo "No files to scan found"
         fi
+
     # TODO: explain this block
     - name: Add SARIF security-severity to properties
       if: hashFiles('zizmor-report.sarif') != ''
@@ -179,8 +181,8 @@ runs:
               end
             )
           )
-        ' zizmor-report.sarif > fixed-report.sarif
-        mv fixed-report.sarif zizmor-report.sarif
+        ' zizmor-report.sarif > updated-report.sarif
+        mv updated-report.sarif zizmor-report.sarif
 
       # Upload results after full scope analysis
     - name: Upload reports
@@ -191,13 +193,14 @@ runs:
         path: zizmor-report.*
         retention-days: 7
 
-    - name: Upload sarif
-      # if SARIF is available, upload it considering that for private repos Advanced Security subscription is n/a
+    - name: Upload SARIF
+      # If SARIF is available, upload it considering that for private repos Advanced Security subscription is n/a
       # PR from fork does not have access to security-events: write token
       if: github.event.repository.private == false && hashFiles('zizmor-report.sarif') != ''
       uses: github/codeql-action/upload-sarif@fdbfb4d2750291e159f0156def62b853c2798ca2 # v4.31.5
       with:
         sarif_file: zizmor-report.sarif
+        category: zizmor
 
     - name: Complete with exit code
       shell: bash
