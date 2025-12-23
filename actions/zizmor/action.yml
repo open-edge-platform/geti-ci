@@ -66,6 +66,10 @@ inputs:
     description: "Whether to fail the action if issues are found"
     required: false
     default: "true"
+  upload-sarif:
+    description: "Whether to upload SARIF results"
+    required: false
+    default: "true"
   # There's no top-level YAML way to declare a variable scoped to a composite action and available in step options.
   zizmor-version:
     description: "Zizmor version"
@@ -218,7 +222,7 @@ runs:
       # If SARIF is available, upload it considering that for private repos Advanced Security subscription is n/a
       # PR from fork does not have access to security-events: write token and therefore comments will not be uploaded into PR
       # but will be visible in workflow log
-      if: github.event.repository.private == false && hashFiles('zizmor-report.sarif') != ''
+      if: inputs.upload-sarif == 'true' && github.event.repository.private == false && hashFiles('zizmor-report.sarif') != ''
       uses: github/codeql-action/upload-sarif@fdbfb4d2750291e159f0156def62b853c2798ca2 # v4.31.5
       with:
         sarif_file: zizmor-report.sarif

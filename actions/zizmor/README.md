@@ -50,15 +50,16 @@ jobs:
 
 ## Inputs
 
-| Name               | Type   | Description                                          | Default Value       | Required |
-| ------------------ | ------ | ---------------------------------------------------- | ------------------- | -------- |
-| `scan-scope`       | String | Scope of files to scan (all/changed)                 | `changed`           | No       |
-| `paths`            | String | Paths to scan when using all scope                   | `.`                 | No       |
-| `severity-level`   | String | Minimum severity level to report (LOW/MEDIUM/HIGH)   | `LOW`               | No       |
-| `confidence-level` | String | Minimum confidence level to report (LOW/MEDIUM/HIGH) | `LOW`               | No       |
-| `output-format`    | String | Format for scan results (plain/json/sarif)           | `plain`             | No       |
-| `fail-on-findings` | String | Whether to fail the action if issues are found       | `true`              | No       |
-| `zizmor-version`   | String | Zizmor version                                       | Updated by Renovate | No       |
+| Name               | Type   | Description                                            | Default Value       | Required |
+| ------------------ | ------ | ------------------------------------------------------ | ------------------- | -------- |
+| `scan-scope`       | String | Scope of files to scan (all/changed)                   | `changed`           | No       |
+| `paths`            | String | Paths to scan when using all scope                     | `.`                 | No       |
+| `severity-level`   | String | Minimum severity level to report (LOW/MEDIUM/HIGH)     | `LOW`               | No       |
+| `confidence-level` | String | Minimum confidence level to report (LOW/MEDIUM/HIGH)   | `LOW`               | No       |
+| `output-format`    | String | Format for scan results (plain/json/sarif)             | `plain`             | No       |
+| `fail-on-findings` | String | Whether to fail the action if issues are found         | `true`              | No       |
+| `upload-sarif`     | String | Whether to upload SARIF results to GitHub Security tab | `true`              | No       |
+| `zizmor-version`   | String | Zizmor version                                         | Updated by Renovate | No       |
 
 ## Configuration
 
