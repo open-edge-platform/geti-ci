@@ -1,24 +1,43 @@
 # Zizmor Scanner Action
 #
 # This composite action executes GitHub Actions workflows scanning using Zizmor,
-# providing configurable security analysis capabilities.
+# providing configurable security analysis with SARIF reporting capabilities.
+#
+# Features:
+# - Scans GitHub Actions workflow files for security issues
+# - Supports two scan scopes: 'all' (full scan) or 'changed' (changed files only)
+# - Generates both SARIF reports (for GitHub Security tab) and plain/json reports
+# - Uploads SARIF to Code Scanning for public repositories
+# - Uploads all reports as workflow artifacts
+# - Configurable severity/confidence thresholds and failure behavior
+#
+# Important: For proper SARIF upload and PR commenting, this action MUST be used
+# within the same workflow and job where GitHub Advanced Security expects results.
+# GitHub Code Scanning correlates SARIF uploads with workflow/job context to provide
+# PR comments and security alerts. Using different workflows or jobs will break this correlation.
 #
 # Example Usage:
 # jobs:
-#  zizmor:
-#    runs-on: ubuntu-latest
-#    steps:
-#      - uses: actions/checkout@v4
-#      - name: Run zizmor scan
-#        uses: ./actions/zizmor
-#        with:
-#          scan-scope: all
-#          severity-level: MEDIUM
-#          confidence-level: HIGH
-#          fail-on-findings: true
+#   zizmor:
+#     runs-on: ubuntu-latest
+#     permissions:
+#       contents: read
+#       security-events: write  # Required for SARIF upload
+#     steps:
+#       - uses: actions/checkout@v6
+#       - name: Run zizmor scan
+#         uses: ./actions/zizmor
+#         with:
+#           scan-scope: all
+#           severity-level: MEDIUM
+#           confidence-level: HIGH
+#           fail-on-findings: true
 #
-# If necessary, put zizmor configuration into default location .github/zizmor.yml"
-# zizmor will discover and use it
+# Configuration:
+# - Optional: Place zizmor configuration in .github/zizmor.yml. The action will automatically discover and use it
+#
+# Note: For private repositories without Advanced Security subscription,
+# SARIF upload is skipped, but reports are still available as workflow artifacts.
 
 name: "Zizmor Security Scan"
 description: "Runs Zizmor with configurable options"
@@ -165,7 +184,9 @@ runs:
           echo "No files to scan found"
         fi
 
-    # TODO: explain this block
+    # SARIF format requires security-severity property for proper severity classification in GitHub Security tab
+    # This step adds numeric severity values based on alert levels as per GitHub's SARIF specification
+    # Reference: https://github.blog/changelog/2021-07-19-codeql-code-scanning-new-severity-levels-for-security-alerts/
     - name: Add SARIF security-severity to properties
       if: hashFiles('zizmor-report.sarif') != ''
       shell: bash
@@ -195,7 +216,8 @@ runs:
 
     - name: Upload SARIF
       # If SARIF is available, upload it considering that for private repos Advanced Security subscription is n/a
-      # PR from fork does not have access to security-events: write token
+      # PR from fork does not have access to security-events: write token and therefore comments will not be uploaded into PR
+      # but will be visible in workflow log
       if: github.event.repository.private == false && hashFiles('zizmor-report.sarif') != ''
       uses: github/codeql-action/upload-sarif@fdbfb4d2750291e159f0156def62b853c2798ca2 # v4.31.5
       with:

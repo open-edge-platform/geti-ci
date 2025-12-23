@@ -1,73 +1,68 @@
 # Zizmor (composite)
 
-This composite action executes GitHub Actions workflows scanning using [Zizmor](https://github.com/woodruffw/zizmor), providing configurable security analysis capabilities.
+This composite action executes GitHub Actions workflows scanning using [Zizmor](https://github.com/zizmorcore/zizmor), providing configurable security analysis with SARIF reporting capabilities.
+
+## Features
+
+- Scans GitHub Actions workflow files for security issues
+- Supports two scan scopes: `all` (full scan) or `changed` (changed files only)
+- Generates both SARIF reports (for GitHub Security tab) and plain/json reports
+- Uploads SARIF to Code Scanning for public repositories
+- Uploads all reports as workflow artifacts
+- Configurable severity/confidence thresholds and failure behavior
+
+## Important: Workflow Context Requirements
+
+For proper SARIF upload and PR commenting, this action **MUST** be used within the same workflow and job where GitHub Advanced Security expects results. GitHub Code Scanning correlates SARIF uploads with workflow/job context to provide PR comments and security alerts. Using different workflows or jobs will break this correlation.
 
 ## Usage
 
-Example usage in a repository on PR (checks only changed files):
+Example usage that scans changed files on PRs and all files on push/schedule:
 
 ```yaml
 name: Zizmor scan
 
 on:
   pull_request:
-
-jobs:
-  zizmor:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Run Zizmor scan
-        uses: ./actions/zizmor
-        with:
-          scan-scope: changed
-          severity-level: MEDIUM
-          confidence-level: HIGH
-          fail-on-findings: true
-```
-
-Example usage in a repository on schedule (checks all scope), uploads results in SARIF format:
-
-```yaml
-name: Zizmor scan
-
-on:
+  push:
+    branches:
+      - main
   schedule:
     - cron: "0 2 * * *"
 
 permissions:
   contents: read
-  security-events: write # to upload sarif output
+  security-events: write # Required for SARIF upload
 
 jobs:
   zizmor:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Run Zizmor scan
-        uses: ./.github/actions/security/zizmor
+        uses: ./actions/zizmor
         with:
-          scan-scope: all
-          severity-level: LOW
-          confidence-level: LOW
-          fail-on-findings: false
+          scan-scope: ${{ github.event_name == 'pull_request' && 'changed' || 'all' }}
+          severity-level: MEDIUM
+          confidence-level: HIGH
+          fail-on-findings: true
 ```
 
 ## Inputs
 
-| Name               | Type    | Description                                          | Default Value       | Required |
-| ------------------ | ------- | ---------------------------------------------------- | ------------------- | -------- |
-| `scan-scope`       | String  | Scope of files to scan (all/changed)                 | `changed`           | No       |
-| `paths`            | String  | Paths to scan when using all scope                   | `.`                 | No       |
-| `severity-level`   | String  | Minimum severity level to report (LOW/MEDIUM/HIGH)   | `LOW`               | No       |
-| `confidence-level` | String  | Minimum confidence level to report (LOW/MEDIUM/HIGH) | `LOW`               | No       |
-| `output-format`    | String  | Format for scan results (plain/json/sarif)           | `sarif`             | No       |
-| `fail-on-findings` | boolean | Whether to fail the action if issues are found       | `true`              | No       |
-| `zizmor-version`   | String  | Zizmor version                                       | Updated by Renovate | No       |
+| Name               | Type   | Description                                          | Default Value       | Required |
+| ------------------ | ------ | ---------------------------------------------------- | ------------------- | -------- |
+| `scan-scope`       | String | Scope of files to scan (all/changed)                 | `changed`           | No       |
+| `paths`            | String | Paths to scan when using all scope                   | `.`                 | No       |
+| `severity-level`   | String | Minimum severity level to report (LOW/MEDIUM/HIGH)   | `LOW`               | No       |
+| `confidence-level` | String | Minimum confidence level to report (LOW/MEDIUM/HIGH) | `LOW`               | No       |
+| `output-format`    | String | Format for scan results (plain/json/sarif)           | `plain`             | No       |
+| `fail-on-findings` | String | Whether to fail the action if issues are found       | `true`              | No       |
+| `zizmor-version`   | String | Zizmor version                                       | Updated by Renovate | No       |
 
-If necessary, put zizmor configuration into default location `.github/zizmor.yml` - zizmor will discover and us it.
+## Configuration
 
-There's no top-level YAML way to declare a variable scoped to a composite action and available in step options, therefore we use input to pass Zizmor version.
+If necessary, put zizmor configuration into default location `.github/zizmor.yml` - zizmor will discover and use it.
 
 ## Outputs
 
@@ -75,6 +70,8 @@ There's no top-level YAML way to declare a variable scoped to a composite action
 | ------------- | ------ | --------------------------------- |
 | `scan_result` | String | Exit code of the Zizmor scan      |
 | `report_path` | String | Path to the generated report file |
+
+**Note**: For private repositories without Advanced Security subscription, SARIF upload is automatically skipped, but reports are still available as workflow artifacts. PRs from forks do not have access to `security-events: write` token, so SARIF comments will not appear in PRs but will be visible in workflow logs.
 
 ## Required permissions
 
