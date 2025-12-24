@@ -1,0 +1,67 @@
+# Integration tests for Zizmor composite action
+# Tests various configurations and scenarios to ensure the action works correctly
+
+name: Test Zizmor Action
+
+on:
+  pull_request:
+    paths:
+      - "actions/zizmor/**"
+      - ".github/workflows/test-zizmor-action.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "actions/zizmor/**"
+      - ".github/workflows/test-zizmor-action.yml"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  # Test 1: Validates basic functionality with default settings
+  zizmor-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+        with:
+          persist-credentials: false
+
+      - name: Run Zizmor - all scope with defaults
+        id: zizmor-all
+        uses: ./actions/zizmor
+        with:
+          upload-sarif: false
+          scan-scope: all
+          fail-on-findings: false
+
+      - name: Verify scan executed
+        shell: bash
+        run: |
+          if [[ -z "${{ steps.zizmor-all.outputs.scan_result }}" ]]; then
+            echo "Error: scan_result output is empty"
+            exit 1
+          fi
+          echo "Scan completed with exit code: ${{ steps.zizmor-all.outputs.scan_result }}"
+
+  # Summary job - provides single point of success/failure
+  # We may add more test jobs in the future
+  zizmor-test-summary:
+    runs-on: ubuntu-latest
+    needs:
+      - zizmor-test
+    if: always()
+    steps:
+      - name: Check test results
+        shell: bash
+        run: |
+          if [[ "${{ needs.zizmor-test.result }}" != "success" ]]; then
+            echo "❌ Test failed"
+            exit 1
+          fi
+
+          echo "✅ All Zizmor action tests passed successfully!"
