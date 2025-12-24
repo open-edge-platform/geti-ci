@@ -72,7 +72,7 @@ If necessary, put zizmor configuration into default location `.github/zizmor.yml
 | `scan_result` | String | Exit code of the Zizmor scan      |
 | `report_path` | String | Path to the generated report file |
 
-**Note**: For private repositories without Advanced Security subscription, SARIF upload is automatically skipped, but reports are still available as workflow artifacts. PRs from forks do not have access to `security-events: write` token, so SARIF comments will not appear in PRs but will be visible in workflow logs.
+**Note**: For private repositories without Advanced Security subscription, SARIF upload is automatically skipped, but reports are still available as workflow artifacts or in workflow logs.
 
 ## Required permissions
 

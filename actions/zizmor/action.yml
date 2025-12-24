@@ -188,9 +188,22 @@ runs:
           echo "No files to scan found"
         fi
 
-    # SARIF format requires security-severity property for proper severity classification in GitHub Security tab
-    # This step adds numeric severity values based on alert levels as per GitHub's SARIF specification
+    # Zizmor supports the following severity levels: informational, low, medium, high.
+    # When generating reports in SARIF format, Zizmor converts them the following way to use in SARIF level property:
+    # - informational -> note
+    # - low -> warning
+    # - medium -> warning
+    # - high -> error
+    # See details in https://github.com/zizmorcore/zizmor/blob/main/crates/zizmor/src/output/sarif.rs
+    # GitHub supports an additional security-severity property in SARIF (this is used by CodeQL and Trivy).
+    # This step enriches original Zizmor SARIF report with this security-severity property based on alert levels as per GitHub's SARIF specification.
+    # Numeric values are used to make the following addition based on level:
+    # - high -> error -> high (8.0)
+    # - warning -> medium (5.0)
+    # - note -> low (3.0)
+    # - none -> none (0.0)
     # Reference: https://github.blog/changelog/2021-07-19-codeql-code-scanning-new-severity-levels-for-security-alerts/
+    # This is necessary for unification across used security tools that produce and upload SARIF output.
     - name: Add SARIF security-severity to properties
       if: hashFiles('zizmor-report.sarif') != ''
       shell: bash
@@ -220,7 +233,6 @@ runs:
 
     - name: Upload SARIF
       # If SARIF is available, upload it considering that for private repos Advanced Security subscription is n/a
-      # PR from fork does not have access to security-events: write token and therefore comments will not be uploaded into PR
       # but will be visible in workflow log
       if: inputs.upload-sarif == 'true' && github.event.repository.private == false && hashFiles('zizmor-report.sarif') != ''
       uses: github/codeql-action/upload-sarif@fdbfb4d2750291e159f0156def62b853c2798ca2 # v4.31.5
