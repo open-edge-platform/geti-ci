@@ -91,9 +91,25 @@ runs:
         SARIF_FILE="zizmor-report.sarif"
         REPORT_FILE="zizmor-report.$INPUTS_OUTPUT_FORMAT"
 
-        # Convert severity and confidence to lowercase
-        SEVERITY=$(echo "$INPUTS_SEVERITY_LEVEL" | tr '[:upper:]' '[:lower:]')
+        # Convert confidence to lowercase
         CONFIDENCE=$(echo "$INPUTS_CONFIDENCE_LEVEL" | tr '[:upper:]' '[:lower:]')
+
+        # Map standard severity levels to Zizmor levels
+        # See Readme for the details
+        case "$INPUTS_SEVERITY" in
+          "LOW")
+            SEVERITY="informational"
+            ;;
+          "MEDIUM")
+            SEVERITY="medium"
+            ;;
+          "HIGH"|"CRITICAL")
+            SEVERITY="high"
+            ;;
+          *)
+            SEVERITY="high"
+            ;;
+        esac
 
         if [[ "$INPUTS_SCAN_SCOPE" == "changed" && -n "$INPUTS_ALL_CHANGED_FILES" ]]; then
           echo "There are some changes detected in yaml/yml, checking with Zizmor"
