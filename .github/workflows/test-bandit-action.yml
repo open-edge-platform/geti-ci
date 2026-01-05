@@ -37,6 +37,7 @@ jobs:
           upload-sarif: false
           scan-scope: all
           fail-on-findings: false
+          artifact-name: test1
 
       - name: Verify scan executed
         shell: bash
@@ -74,7 +75,6 @@ jobs:
                   return pickle.load(f)
           # B105: Hardcoded password
           password = "hardcoded_password_123"
-
           EOF
 
       - name: Run Bandit on vulnerable file
@@ -87,6 +87,7 @@ jobs:
           fail-on-findings: false
           severity-level: LOW
           confidence-level: LOW
+          artifact-name: test2
 
       - name: Verify issues were detected
         shell: bash

@@ -96,6 +96,7 @@ jobs:
 
 | Name               | Type    | Description                                                 | Default Value       | Required |
 | ------------------ | ------- | ----------------------------------------------------------- | ------------------- | -------- |
+| `artifact-name`    | String  | Artifact name                                               | `bandit-results`    | No       |
 | `scan-scope`       | String  | Scope of files to scan (all/changed)                        | `changed`           | No       |
 | `paths`            | String  | Paths to scan when using all scope                          | `.`                 | No       |
 | `config_file`      | String  | Path to pyproject.toml or custom bandit config              | `pyproject.toml`    | No       |
