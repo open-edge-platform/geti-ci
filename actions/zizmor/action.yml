@@ -96,7 +96,7 @@ runs:
 
         # Map standard severity levels to Zizmor levels
         # See Readme for the details
-        case "$INPUTS_SEVERITY" in
+        case "$INPUTS_SEVERITY_LEVEL" in
           "LOW")
             SEVERITY="informational"
             ;;
