@@ -23,10 +23,10 @@ This is necessary for unification across security tools that produce and upload 
 GitHub [supports](https://github.blog/changelog/2021-07-19-codeql-code-scanning-new-severity-levels-for-security-alerts/) an additional security-severity property in SARIF (this is used by CodeQL and Trivy).
 Each action enriches the original SARIF report produced by the tool with this security-severity property based on SARIF alert levels. Numeric values are used to make the following additions based on level:
 
-- none → none (0.0)
-- note → low (3.0)
-- warning → medium (5.0)
-- error → high (8.0)
+- `none` → `none` (0.0)
+- `note` → `low` (3.0)
+- `warning` → `medium` (5.0)
+- `error` → `high` (8.0)
 
 **Mapping flow**: Action input unified severity level → severity level used by the tool → SARIF level used by the tool → security-severity added by action into original SARIF report
 
@@ -50,11 +50,11 @@ For Zizmor severity to SARIF level mapping see Zizmor [code](https://github.com/
 
 The following tables summarize minimal confidence level mapping approach for Zizmor (1:1 mapping).
 
-| Action input confidence → | Zizmor confidence → |
-| ------------------------- | ------------------- |
-| `LOW`                     | `low`               |
-| `MEDIUM`                  | `medium`            |
-| `HIGH`                    | `high`              |
+| Action input confidence → | Zizmor confidence |
+| ------------------------- | ----------------- |
+| `LOW`                     | `low`             |
+| `MEDIUM`                  | `medium`          |
+| `HIGH`                    | `high`            |
 
 ## Workflow Context Requirements
 

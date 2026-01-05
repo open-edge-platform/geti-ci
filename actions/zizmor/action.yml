@@ -117,7 +117,8 @@ runs:
 
           # First run is to produce output in SARIF format
 
-          uvx zizmor=="$ZIZMOR_VERSION" \
+            echo "Running: uvx zizmor==\"$ZIZMOR_VERSION\" --min-confidence \"${CONFIDENCE}\" --min-severity \"${SEVERITY}\" --quiet --format sarif ."
+            uvx zizmor=="$ZIZMOR_VERSION" \
               --min-confidence "${CONFIDENCE}" \
               --min-severity "${SEVERITY}" \
               --quiet \
@@ -132,7 +133,8 @@ runs:
           # As a result, zizmor will always exit with code 0 even if findings are present, that is why we need this run to break CI, if required
           # https://docs.zizmor.sh/integrations/#manual-integration
 
-          uvx zizmor=="$ZIZMOR_VERSION" \
+            echo "Running: uvx zizmor==\"$ZIZMOR_VERSION\" --min-confidence \"${CONFIDENCE}\" --min-severity \"${SEVERITY}\" --format plain ."
+            uvx zizmor=="$ZIZMOR_VERSION" \
               --min-confidence "${CONFIDENCE}" \
               --min-severity "${SEVERITY}" \
                --format plain \
@@ -144,7 +146,8 @@ runs:
           echo "Running Zizmor on all files in $INPUTS_PATHS"
 
           # First run to produce SARIF for upload into Security tab
-          uvx zizmor=="$ZIZMOR_VERSION" \
+            echo "Running: uvx zizmor==\"$ZIZMOR_VERSION\" --min-confidence \"${CONFIDENCE}\" --min-severity \"${SEVERITY}\" --quiet --format sarif \"$INPUTS_PATHS\""
+            uvx zizmor=="$ZIZMOR_VERSION" \
               --min-confidence "${CONFIDENCE}" \
               --min-severity "${SEVERITY}" \
               --quiet \
@@ -154,7 +157,8 @@ runs:
 
           # Second run to produce plain/json report
           # This is required for private repos that may not have Advanced Security subscription
-          uvx zizmor=="$ZIZMOR_VERSION" \
+            echo "Running: uvx zizmor==\"$ZIZMOR_VERSION\" --min-confidence \"${CONFIDENCE}\" --min-severity \"${SEVERITY}\" --format \"$INPUTS_OUTPUT_FORMAT\" \"$INPUTS_PATHS\""
+            uvx zizmor=="$ZIZMOR_VERSION" \
               --min-confidence "${CONFIDENCE}" \
               --min-severity "${SEVERITY}" \
               --format "$INPUTS_OUTPUT_FORMAT" \
