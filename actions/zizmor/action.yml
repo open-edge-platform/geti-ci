@@ -1,24 +1,7 @@
 # Zizmor Scanner Action
 #
-# This composite action executes GitHub Actions workflows scanning using zizmor,
-# providing configurable security analysis capabilities.
-#
-# Example Usage:
-# jobs:
-#  zizmor:
-#    runs-on: ubuntu-latest
-#    steps:
-#      - uses: actions/checkout@v4
-#      - name: Run zizmor scan
-#        uses: ./actions/zizmor
-#        with:
-#          scan-scope: all
-#          severity-level: MEDIUM
-#          confidence-level: HIGH
-#          fail-on-findings: true
-#
-# If necessary, put zizmor configuration into default location .github/zizmor.yml"
-# zizmor will discover and us it
+# This composite action executes GitHub Actions workflows scanning using Zizmor,
+# providing configurable security analysis with SARIF reporting capabilities.
 
 name: "Zizmor Security Scan"
 description: "Runs Zizmor with configurable options"
@@ -33,7 +16,7 @@ inputs:
     required: false
     default: "." # all scope by default
   severity-level:
-    description: "Minimum severity level to report (LOW/MEDIUM/HIGH)"
+    description: "Minimum severity level to report (LOW/MEDIUM/HIGH/CRITICAL)"
     default: "LOW"
   confidence-level:
     description: "Minimum confidence level to report (LOW/MEDIUM/HIGH)"
@@ -42,9 +25,13 @@ inputs:
   output-format:
     description: "Format for scan results (plain/json/sarif)"
     required: false
-    default: "sarif" # by default to upload into Security tab
+    default: "plain" # use plain by default
   fail-on-findings:
     description: "Whether to fail the action if issues are found"
+    required: false
+    default: "true"
+  upload-sarif:
+    description: "Whether to upload SARIF results"
     required: false
     default: "true"
   # There's no top-level YAML way to declare a variable scoped to a composite action and available in step options.
@@ -52,7 +39,7 @@ inputs:
     description: "Zizmor version"
     required: false
     # renovate: datasource=github-releases depName=zizmorcore/zizmor
-    default: v1.18.0
+    default: v1.19.0
 
 outputs:
   scan_result:
@@ -81,6 +68,7 @@ runs:
         files: |
           **/*.yaml
           **/*.yml
+
     - name: Run Zizmor
       id: run-zizmor
       shell: bash
@@ -100,41 +88,115 @@ runs:
 
       run: |
         set +e
+        SARIF_FILE="zizmor-report.sarif"
         REPORT_FILE="zizmor-report.$INPUTS_OUTPUT_FORMAT"
 
-        # Convert severity and confidence to lowercase
-        SEVERITY=$(echo "$INPUTS_SEVERITY_LEVEL" | tr '[:upper:]' '[:lower:]')
+        # Convert confidence to lowercase
         CONFIDENCE=$(echo "$INPUTS_CONFIDENCE_LEVEL" | tr '[:upper:]' '[:lower:]')
+
+        # Map standard severity levels to Zizmor levels
+        # See Readme for the details
+        case "$INPUTS_SEVERITY_LEVEL" in
+          "LOW")
+            SEVERITY="informational"
+            ;;
+          "MEDIUM")
+            SEVERITY="medium"
+            ;;
+          "HIGH"|"CRITICAL")
+            SEVERITY="high"
+            ;;
+          *)
+            SEVERITY="high"
+            ;;
+        esac
 
         if [[ "$INPUTS_SCAN_SCOPE" == "changed" && -n "$INPUTS_ALL_CHANGED_FILES" ]]; then
           echo "There are some changes detected in yaml/yml, checking with Zizmor"
           echo "Changed files: ${INPUTS_ALL_CHANGED_FILES}"
-          uvx zizmor=="$ZIZMOR_VERSION" \
-              --min-confidence ${CONFIDENCE} \
-              --min-severity ${SEVERITY} \
+
+          # First run is to produce output in SARIF format
+
+            echo "Running: uvx zizmor==\"$ZIZMOR_VERSION\" --min-confidence \"${CONFIDENCE}\" --min-severity \"${SEVERITY}\" --quiet --format sarif ."
+            uvx zizmor=="$ZIZMOR_VERSION" \
+              --min-confidence "${CONFIDENCE}" \
+              --min-severity "${SEVERITY}" \
+              --quiet \
+              --format sarif \
+              . \
+              > "$SARIF_FILE"
+
+          # Second run is to produce plain report and output into workflow log
+          # This is necessary for private repos that may not have Advanced Security subscription
+          # And therefore, SARIF upload can not be used
+          # Also when using --format=sarif, zizmor does not use its exit codes to signal the presence of findings
+          # As a result, zizmor will always exit with code 0 even if findings are present, that is why we need this run to break CI, if required
+          # https://docs.zizmor.sh/integrations/#manual-integration
+
+            echo "Running: uvx zizmor==\"$ZIZMOR_VERSION\" --min-confidence \"${CONFIDENCE}\" --min-severity \"${SEVERITY}\" --format plain ."
+            uvx zizmor=="$ZIZMOR_VERSION" \
+              --min-confidence "${CONFIDENCE}" \
+              --min-severity "${SEVERITY}" \
+               --format plain \
               .
           exit_code="$?"
           echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
 
         elif [[ "$INPUTS_SCAN_SCOPE" == "all" ]] ; then
           echo "Running Zizmor on all files in $INPUTS_PATHS"
-          uvx zizmor=="$ZIZMOR_VERSION" \
-              --min-confidence ${CONFIDENCE} \
-              --min-severity ${SEVERITY} \
+
+          # First run to produce SARIF for upload into Security tab
+            echo "Running: uvx zizmor==\"$ZIZMOR_VERSION\" --min-confidence \"${CONFIDENCE}\" --min-severity \"${SEVERITY}\" --quiet --format sarif \"$INPUTS_PATHS\""
+            uvx zizmor=="$ZIZMOR_VERSION" \
+              --min-confidence "${CONFIDENCE}" \
+              --min-severity "${SEVERITY}" \
+              --quiet \
+              --format sarif \
+              "$INPUTS_PATHS" \
+              > "$SARIF_FILE"
+
+          # Second run to produce plain/json report
+          # This is required for private repos that may not have Advanced Security subscription
+            echo "Running: uvx zizmor==\"$ZIZMOR_VERSION\" --min-confidence \"${CONFIDENCE}\" --min-severity \"${SEVERITY}\" --format \"$INPUTS_OUTPUT_FORMAT\" \"$INPUTS_PATHS\""
+            uvx zizmor=="$ZIZMOR_VERSION" \
+              --min-confidence "${CONFIDENCE}" \
+              --min-severity "${SEVERITY}" \
               --format "$INPUTS_OUTPUT_FORMAT" \
               "$INPUTS_PATHS" \
               > "$REPORT_FILE"
-
           exit_code="$?"
           echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
           echo "report_path=${REPORT_FILE}" >> $GITHUB_OUTPUT
+
         else
           echo "No files to scan found"
         fi
 
-        if [[ "$INPUTS_FAIL_ON_FINDINGS" == "true" && -n "$exit_code" && "$exit_code" != "0" ]]; then
-          exit $exit_code
-        fi
+    # GitHub supports an additional security-severity property in SARIF.
+    # This step enriches original Zizmor SARIF report with this security-severity property based on alert levels as per GitHub's SARIF specification.
+    # This is necessary for unification across used security tools that produce and upload SARIF output.
+    # Numeric values are used to make the following addition based on level:
+    # - error -> high (8.0)
+    # - warning -> medium (5.0)
+    # - note -> low (3.0)
+    # - none -> none (0.0)
+    - name: Add SARIF security-severity to properties
+      if: hashFiles('zizmor-report.sarif') != ''
+      shell: bash
+      run: |
+        jq '
+          .runs[0].results |= map(
+            .properties["security-severity"] = (
+              if .level == "error" then "8.0"
+              elif .level == "warning" then "5.0"
+              elif .level == "note" then "3.0"
+              elif .level == "none" then "0.0"
+              else null
+              end
+            )
+          )
+        ' zizmor-report.sarif > updated-report.sarif
+        mv updated-report.sarif zizmor-report.sarif
 
       # Upload results after full scope analysis
     - name: Upload reports
@@ -144,8 +206,32 @@ runs:
         name: zizmor-results
         path: zizmor-report.*
         retention-days: 7
-    - name: Upload sarif
-      if: hashFiles('zizmor-report.sarif') != '' # if SARIF is available, upload it
+
+    - name: Upload SARIF
+      # If SARIF is available, upload it considering that for private repos Advanced Security subscription is n/a
+      # but will be visible in workflow log
+      if: inputs.upload-sarif == 'true' && github.event.repository.private == false && hashFiles('zizmor-report.sarif') != ''
       uses: github/codeql-action/upload-sarif@fdbfb4d2750291e159f0156def62b853c2798ca2 # v4.31.5
       with:
         sarif_file: zizmor-report.sarif
+        category: zizmor
+
+    - name: Complete with exit code
+      shell: bash
+      env:
+        INPUTS_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+        EXIT_CODE: ${{ steps.run-zizmor.outputs.exit_code}}
+
+      run: |
+        # Respect INPUTS_FAIL_ON_FINDINGS only if exit code == 1 or > 10
+        # Otherwise, use exit code to catch Zizmor internal issues
+        # https://docs.zizmor.sh/usage/#exit-codes
+
+        set +e
+        if [[ "$INPUTS_FAIL_ON_FINDINGS" == "false" && -n "$EXIT_CODE" && ("$EXIT_CODE" == "1" || "$EXIT_CODE" -gt 10) ]]; then
+          exit 0
+        elif [[ -n "$EXIT_CODE" ]]; then
+          exit $EXIT_CODE
+        else
+          echo "No exit_code"
+        fi
