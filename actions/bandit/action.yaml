@@ -2,47 +2,6 @@
 #
 # This composite action executes Python security scanning using Bandit,
 # providing configurable security analysis capabilities.
-#
-# Key Features:
-# - Python code scanning
-# - Severity configuration
-# - Flexible scan scope
-# - Multiple report formats
-# - Custom rule support
-#
-# Process Stages:
-# 1. Environment Setup:
-#    - Python installation
-#    - Bandit configuration
-#    - Cache preparation
-#
-# 2. Scan Execution:
-#    - Target determination
-#    - Rule application
-#    - Security analysis
-#
-# 3. Results Processing:
-#    - Report generation
-#    - Finding analysis
-#    - Output formatting
-#
-# Required Inputs:
-# - scan-scope: Files to scan
-# - severity_level: Issue severity threshold
-# - fail-on-findings: Whether to fail on issues
-#
-# Outputs:
-# - scan_result: Scan exit code
-# - report_path: Results location
-#
-# Example Usage:
-# steps:
-#   - uses: ./.github/actions/security/bandit
-#     with:
-#       scan-scope: "changed"
-#       severity_level: "MEDIUM"
-#
-# Note: Configure Bandit settings in pyproject.toml for best results
 
 name: "Bandit Security Scan"
 description: "Runs Bandit security scanner with configurable options"
@@ -61,18 +20,23 @@ inputs:
     required: false
     default: "pyproject.toml"
   severity-level:
-    description: "Minimum severity level to report (all/LOW/MEDIUM/HIGH)"
+    description: "Minimum severity level to report (LOW/MEDIUM/HIGH/CRITICAL)"
+    required: false
     default: "LOW"
   confidence-level:
-    description: "Minimum confidence level to report (all/LOW/MEDIUM/HIGH)"
+    description: "Minimum confidence level to report (LOW/MEDIUM/HIGH)"
     required: false
     default: "LOW"
   output-format:
     description: "Format for scan results (json/txt/html/csv/sarif)"
     required: false
-    default: "sarif" # by default to upload into Security tab
+    default: "txt"
   fail-on-findings:
     description: "Whether to fail the action if issues are found"
+    required: false
+    default: "true"
+  upload-sarif:
+    description: "Whether to upload SARIF results"
     required: false
     default: "true"
   bandit-version:
@@ -130,10 +94,28 @@ runs:
       run: |
         set +e
         REPORT_FILE="bandit-report.$INPUTS_OUTPUT_FORMAT"
+        SARIF_FILE="bandit-report.sarif"
 
-        # Convert severity and confidence to lowercase
-        SEVERITY=$(echo "$INPUTS_SEVERITY_LEVEL" | tr '[:upper:]' '[:lower:]')
+        # Convert confidence to lowercase
         CONFIDENCE=$(echo "$INPUTS_CONFIDENCE_LEVEL" | tr '[:upper:]' '[:lower:]')
+
+        # Map standard severity levels to Bandit levels
+        # Bandit uses: low, medium, high
+        # Standard levels: LOW, MEDIUM, HIGH, CRITICAL
+        case "$INPUTS_SEVERITY_LEVEL" in
+          "LOW")
+            SEVERITY="low"
+            ;;
+          "MEDIUM")
+            SEVERITY="medium"
+            ;;
+          "HIGH"|"CRITICAL")
+            SEVERITY="high"
+            ;;
+          *)
+            SEVERITY="high"
+            ;;
+        esac
 
         # Check if config file is provided
         if [[ -f "$INPUTS_CONFIG_FILE" ]]; then
@@ -143,9 +125,24 @@ runs:
         fi
 
         if [[ "$INPUTS_SCAN_SCOPE" == "changed" && -n "${INPUTS_ALL_CHANGED_FILES}" ]]; then
-          echo "Running Bandit on changed files, output results into workflow log only"
+          echo "There are some changes detected, running Bandit"
           echo "Changed files: ${INPUTS_ALL_CHANGED_FILES}"
           FILES="${INPUTS_ALL_CHANGED_FILES}"
+
+          # First run is to produce output in SARIF format
+           bandit \
+            -a file \
+            ${CONFIG_OPTION} \
+            --exit-zero \
+            --severity-level ${SEVERITY} \
+            --confidence-level ${CONFIDENCE} \
+            -f sarif \
+            -o "${SARIF_FILE}" \
+            -r ${FILES}
+
+          # Second run is to produce plain report and output into workflow log
+          # This is necessary for private repos that may not have Advanced Security subscription
+          # And therefore, SARIF upload can not be used
           bandit \
             -a file \
             ${CONFIG_OPTION} \
@@ -157,6 +154,18 @@ runs:
 
         elif [[ "$INPUTS_SCAN_SCOPE" == "all" ]] ; then
           echo "Running Bandit on all files in $INPUTS_PATHS"
+          # First run to produce SARIF for upload into Security tab
+          bandit \
+            ${CONFIG_OPTION} \
+            --severity-level ${SEVERITY} \
+            --confidence-level ${CONFIDENCE} \
+            --exit-zero \
+            -f sarif \
+            -o "${SARIF_FILE}" \
+            -r "$INPUTS_PATHS"
+
+          # Second run to produce txt/csv/etc report
+          # This is required for private repos that may not have Advanced Security subscription
           bandit \
             ${CONFIG_OPTION} \
             --severity-level ${SEVERITY} \
@@ -171,9 +180,31 @@ runs:
           echo "No files to scan found"
         fi
 
-        if [[ "$INPUTS_FAIL_ON_FINDINGS" == "true" && -n "$exit_code" && "$exit_code" != "0" ]]; then
-          exit $exit_code
-        fi
+    # GitHub supports an additional security-severity property in SARIF.
+    # This step enriches original Bandit SARIF report with this security-severity property based on alert levels as per GitHub's SARIF specification.
+    # This is necessary for unification across used security tools that produce and upload SARIF output.
+    # Numeric values are used to make the following addition based on level:
+    # - error -> high (8.0)
+    # - warning -> medium (5.0)
+    # - note -> low (3.0)
+    # - none -> none (0.0)
+    - name: Add SARIF security-severity to properties
+      if: hashFiles('bandit-report.sarif') != ''
+      shell: bash
+      run: |
+        jq '
+          .runs[0].results |= map(
+            .properties["security-severity"] = (
+              if .level == "error" then "8.0"
+              elif .level == "warning" then "5.0"
+              elif .level == "note" then "3.0"
+              elif .level == "none" then "0.0"
+              else null
+              end
+            )
+          )
+        ' bandit-report.sarif > updated-report.sarif
+        mv updated-report.sarif bandit-report.sarif
 
       # Upload results after full scope analysis
     - name: Upload reports
@@ -183,8 +214,33 @@ runs:
         name: bandit-results
         path: bandit-report.*
         retention-days: 7
-    - name: Upload sarif
-      if: hashFiles('bandit-report.sarif') != '' # if SARIF is available, upload it
+
+    - name: Upload SARIF
+      # If SARIF is available, upload it considering that for private repos Advanced Security subscription is n/a
+      # but will be visible in workflow log
+      if: inputs.upload-sarif == 'true' && github.event.repository.private == false && hashFiles('bandit-report.sarif') != ''
       uses: github/codeql-action/upload-sarif@5d4e8d1aca955e8d8589aabd499c5cae939e33c7 # v4.31.9
       with:
         sarif_file: bandit-report.sarif
+        category: bandit
+
+    - name: Complete with exit code
+      shell: bash
+      env:
+        INPUTS_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+        EXIT_CODE: ${{ steps.run-bandit.outputs.exit_code}}
+
+      run: |
+        # Respect INPUTS_FAIL_ON_FINDINGS setting
+        # Exit with the scan's exit code if fail-on-findings is true and findings exist
+
+        set +e
+        if [[ "$INPUTS_FAIL_ON_FINDINGS" == "false" && -n "$EXIT_CODE" && "$EXIT_CODE" != "0" ]]; then
+          echo "Findings detected but fail-on-findings is false, exiting with success"
+          exit 0
+        elif [[ -n "$EXIT_CODE" ]]; then
+          exit "$EXIT_CODE"
+        else
+          echo "No exit code set, assuming success"
+          exit 0
+        fi
