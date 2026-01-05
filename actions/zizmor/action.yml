@@ -2,42 +2,6 @@
 #
 # This composite action executes GitHub Actions workflows scanning using Zizmor,
 # providing configurable security analysis with SARIF reporting capabilities.
-#
-# Features:
-# - Scans GitHub Actions workflow files for security issues
-# - Supports two scan scopes: 'all' (full scan) or 'changed' (changed files only)
-# - Generates both SARIF reports (for GitHub Security tab) and plain/json reports
-# - Uploads SARIF to Code Scanning for public repositories
-# - Uploads all reports as workflow artifacts
-# - Configurable severity/confidence thresholds and failure behavior
-#
-# Important: For proper SARIF upload and PR commenting, this action MUST be used
-# within the same workflow and job where GitHub Advanced Security expects results.
-# GitHub Code Scanning correlates SARIF uploads with workflow/job context to provide
-# PR comments and security alerts. Using different workflows or jobs will break this correlation.
-#
-# Example Usage:
-# jobs:
-#   zizmor:
-#     runs-on: ubuntu-latest
-#     permissions:
-#       contents: read
-#       security-events: write  # Required for SARIF upload
-#     steps:
-#       - uses: actions/checkout@v6
-#       - name: Run zizmor scan
-#         uses: ./actions/zizmor
-#         with:
-#           scan-scope: all
-#           severity-level: MEDIUM
-#           confidence-level: HIGH
-#           fail-on-findings: true
-#
-# Configuration:
-# - Optional: Place zizmor configuration in .github/zizmor.yml. The action will automatically discover and use it
-#
-# Note: For private repositories without Advanced Security subscription,
-# SARIF upload is skipped, but reports are still available as workflow artifacts.
 
 name: "Zizmor Security Scan"
 description: "Runs Zizmor with configurable options"
@@ -52,7 +16,7 @@ inputs:
     required: false
     default: "." # all scope by default
   severity-level:
-    description: "Minimum severity level to report (LOW/MEDIUM/HIGH)"
+    description: "Minimum severity level to report (LOW/MEDIUM/HIGH/CRITICAL)"
     default: "LOW"
   confidence-level:
     description: "Minimum confidence level to report (LOW/MEDIUM/HIGH)"
@@ -188,22 +152,14 @@ runs:
           echo "No files to scan found"
         fi
 
-    # Zizmor supports the following severity levels: informational, low, medium, high.
-    # When generating reports in SARIF format, Zizmor converts them the following way to use in SARIF level property:
-    # - informational -> note
-    # - low -> warning
-    # - medium -> warning
-    # - high -> error
-    # See details in https://github.com/zizmorcore/zizmor/blob/main/crates/zizmor/src/output/sarif.rs
-    # GitHub supports an additional security-severity property in SARIF (this is used by CodeQL and Trivy).
+    # GitHub supports an additional security-severity property in SARIF.
     # This step enriches original Zizmor SARIF report with this security-severity property based on alert levels as per GitHub's SARIF specification.
+    # This is necessary for unification across used security tools that produce and upload SARIF output.
     # Numeric values are used to make the following addition based on level:
-    # - high -> error -> high (8.0)
+    # - error -> high (8.0)
     # - warning -> medium (5.0)
     # - note -> low (3.0)
     # - none -> none (0.0)
-    # Reference: https://github.blog/changelog/2021-07-19-codeql-code-scanning-new-severity-levels-for-security-alerts/
-    # This is necessary for unification across used security tools that produce and upload SARIF output.
     - name: Add SARIF security-severity to properties
       if: hashFiles('zizmor-report.sarif') != ''
       shell: bash
