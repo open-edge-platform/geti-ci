@@ -41,12 +41,14 @@ jobs:
 
       - name: Verify scan executed
         shell: bash
+        env:
+          SCAN_RESULT: ${{ steps.zizmor-all.outputs.scan_result }}
         run: |
-          if [[ -z "${{ steps.zizmor-all.outputs.scan_result }}" ]]; then
+          if [[ -z "$SCAN_RESULT" ]]; then
             echo "Error: scan_result output is empty"
             exit 1
           fi
-          echo "Scan completed with exit code: ${{ steps.zizmor-all.outputs.scan_result }}"
+          echo "Scan completed with exit code: $SCAN_RESULT"
 
   # Summary job - provides single point of success/failure
   # We may add more test jobs in the future
@@ -58,8 +60,10 @@ jobs:
     steps:
       - name: Check test results
         shell: bash
+        env:
+          TEST_RESULT: ${{ needs.zizmor-test.result }}
         run: |
-          if [[ "${{ needs.zizmor-test.result }}" != "success" ]]; then
+          if [[ "$TEST_RESULT" != "success" ]]; then
             echo "❌ Test failed"
             exit 1
           fi
