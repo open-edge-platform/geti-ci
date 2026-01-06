@@ -217,6 +217,7 @@ runs:
         category: zizmor
 
     - name: Complete with exit code
+      if: always()
       shell: bash
       env:
         INPUTS_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}

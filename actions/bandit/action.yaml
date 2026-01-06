@@ -130,6 +130,7 @@ runs:
 
         if [[ "$INPUTS_SCAN_SCOPE" == "changed" && -n "${INPUTS_ALL_CHANGED_FILES}" ]]; then
           echo "There are some changes detected, running Bandit"
+          echo "Running Bandit with --severity-level ${SEVERITY} and --confidence-level ${CONFIDENCE}"
           echo "Changed files: ${INPUTS_ALL_CHANGED_FILES}"
           FILES="${INPUTS_ALL_CHANGED_FILES}"
 
@@ -158,6 +159,7 @@ runs:
 
         elif [[ "$INPUTS_SCAN_SCOPE" == "all" ]] ; then
           echo "Running Bandit on all files in $INPUTS_PATHS"
+          echo "Running Bandit with --severity-level ${SEVERITY} and --confidence-level ${CONFIDENCE}"
           # First run to produce SARIF for upload into Security tab
           bandit \
             ${CONFIG_OPTION} \
@@ -229,6 +231,7 @@ runs:
         category: bandit
 
     - name: Complete with exit code
+      if: always()
       shell: bash
       env:
         INPUTS_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
