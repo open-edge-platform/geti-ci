@@ -205,7 +205,7 @@ runs:
               elif .level == "warning" then "5.0"
               elif .level == "note" then "3.0"
               elif .level == "none" then "0.0"
-              else null
+              else "3.0"
               end
             )
           )
