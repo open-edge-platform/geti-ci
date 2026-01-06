@@ -1,0 +1,135 @@
+# Integration tests for Bandit composite action
+
+name: Test Bandit Action
+
+on:
+  pull_request:
+    paths:
+      - "actions/bandit/**"
+      - ".github/workflows/test-bandit-action.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "actions/bandit/**"
+      - ".github/workflows/test-bandit-action.yml"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  # Test 1: Validates basic functionality with default settings
+  bandit-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run Bandit - all scope with defaults
+        id: bandit-all
+        uses: ./actions/bandit
+        with:
+          upload-sarif: false
+          scan-scope: all
+          fail-on-findings: false
+          artifact-name: test1
+
+      - name: Verify scan executed
+        shell: bash
+        env:
+          SCAN_RESULT: ${{ steps.bandit-all.outputs.scan_result }}
+        run: |
+          if [[ -z "$SCAN_RESULT" ]]; then
+            echo "Error: scan_result output is empty"
+            exit 1
+          fi
+          echo "Scan completed with exit code: $SCAN_RESULT"
+
+  # Test 2: Validates that Bandit can detect security issues
+  bandit-detection-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          persist-credentials: false
+
+      - name: Create test file with security issues
+        shell: bash
+        run: |
+          mkdir -p test-files
+          cat > test-files/vulnerable.py << 'EOF'
+          # Test file with known security issues for Bandit detection
+          import pickle
+          # B301: Pickle usage (deserialize untrusted data)
+          def load_data(filename):
+              with open(filename, 'rb') as f:
+                  return pickle.load(f)
+          # B105: Hardcoded password
+          password = "hardcoded_password_123"
+          EOF
+
+      - name: Run Bandit on vulnerable file
+        id: bandit-detection
+        uses: ./actions/bandit
+        with:
+          upload-sarif: false
+          scan-scope: all
+          paths: test-files/
+          fail-on-findings: false
+          severity-level: LOW
+          confidence-level: LOW
+          artifact-name: test2
+
+      - name: Verify issues were detected
+        shell: bash
+        env:
+          SCAN_RESULT: ${{ steps.bandit-detection.outputs.scan_result }}
+        run: |
+          if [[ -z "$SCAN_RESULT" ]]; then
+            echo "Error: scan_result output is empty"
+            exit 1
+          fi
+
+          # Bandit returns 1 when issues are found
+          if [[ "$SCAN_RESULT" != "1" ]]; then
+            echo "Error: Expected Bandit to find issues (exit code 1), but got: $SCAN_RESULT"
+            exit 1
+          fi
+
+          echo "✅ Bandit successfully detected security issues (exit code: $SCAN_RESULT)"
+
+  # Summary job - provides single point of success/failure
+  # We may add more test jobs in the future
+  bandit-test-summary:
+    runs-on: ubuntu-latest
+    needs:
+      - bandit-test
+      - bandit-detection-test
+    if: always()
+    steps:
+      - name: Check test results
+        shell: bash
+        env:
+          TEST_BASIC_RESULT: ${{ needs.bandit-test.result }}
+          TEST_DETECTION_RESULT: ${{ needs.bandit-detection-test.result }}
+        run: |
+          if [[ "$TEST_BASIC_RESULT" != "success" ]]; then
+            echo "❌ Basic test failed"
+            exit 1
+          fi
+
+          if [[ "$TEST_DETECTION_RESULT" != "success" ]]; then
+            echo "❌ Detection test failed"
+            exit 1
+          fi
+
+          echo "✅ All Bandit action tests passed successfully!"

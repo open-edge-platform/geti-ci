@@ -191,7 +191,7 @@ runs:
               elif .level == "warning" then "5.0"
               elif .level == "note" then "3.0"
               elif .level == "none" then "0.0"
-              else null
+              else "3.0"
               end
             )
           )
@@ -217,6 +217,7 @@ runs:
         category: zizmor
 
     - name: Complete with exit code
+      if: always()
       shell: bash
       env:
         INPUTS_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
@@ -233,5 +234,6 @@ runs:
         elif [[ -n "$EXIT_CODE" ]]; then
           exit $EXIT_CODE
         else
-          echo "No exit_code"
+          echo "No exit code set, assuming success"
+          exit 0
         fi
