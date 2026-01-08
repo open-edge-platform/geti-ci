@@ -68,6 +68,7 @@
       //https://docs.renovatebot.com/modules/manager/regex/#advanced-capture
       matchStrings: [
         "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\s+.+default: (?<currentValue>.*)",
+        "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\s+VERSION=(?<currentValue>.*)",
       ],
     },
   ],
