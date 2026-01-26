@@ -5,13 +5,13 @@ inputs:
   path:
     description: "Path to the pyproject.toml file"
     required: true
-  extras:
-    description: "Comma-separated list of extras to install (e.g., 'full' or 'dev,test'). Leave empty for no extras."
-    required: true
   artifact-name:
     description: "Name of the uploaded artifact"
     required: false
     default: "licenses-list-csv"
+  extras:
+    description: "Comma-separated list of extras to install (e.g., 'full' or 'dev,test'). If not set --all-extras mode enabled."
+    required: false
   uv-version:
     description: "Version of uv to install"
     required: false
@@ -57,9 +57,11 @@ runs:
         if [ -n "$EXTRAS" ]; then
           # Convert comma-separated extras to --extra flags
           EXTRA_FLAGS=$(echo "$EXTRAS" | tr ',' '\n' | sed 's/^/--extra /' | tr '\n' ' ')
+          echo "Installing with extras: $EXTRAS"
           uv sync --frozen $EXTRA_FLAGS
         else
-          uv sync --frozen
+          echo "Installing with all extras"
+          uv sync --frozen --all-extras
         fi
         uv pip install 'pip-licenses==5.5.0'
         uv run pip-licenses
