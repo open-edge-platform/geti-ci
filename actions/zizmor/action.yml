@@ -39,7 +39,7 @@ inputs:
     description: "Zizmor version"
     required: false
     # renovate: datasource=github-releases depName=zizmorcore/zizmor
-    default: v1.19.0
+    default: v1.22.0
 
 outputs:
   scan_result:
