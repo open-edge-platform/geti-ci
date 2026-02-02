@@ -69,6 +69,7 @@
       matchStrings: [
         "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\s+.+default: (?<currentValue>.*)",
         "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\s+VERSION=(?<currentValue>.*)",
+        "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\s+uv pip install pip-licenses==(?<currentValue>.*)",
       ],
     },
   ],
