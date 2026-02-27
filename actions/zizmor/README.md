@@ -62,6 +62,8 @@ For proper SARIF upload and PR commenting, this action **MUST** be used within t
 
 ## Usage
 
+> [!IMPORTANT] This is a monorepo containing several Actions. When we release Zizmor action, we create a tag `zizmor/v<version>`, e.g. `zizmor/v0.1.0`.
+
 Example usage that scans changed files on PRs and all files on push/schedule:
 
 ```yaml
@@ -75,22 +77,40 @@ on:
   schedule:
     - cron: "0 2 * * *"
 
-permissions:
-  contents: read
-  security-events: write # Required for SARIF upload
+permissions: {} # No permissions by default
 
 jobs:
-  zizmor:
+  zizmor-scan:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # Needed to upload the results to code-scanning dashboard
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
       - name: Run Zizmor scan
-        uses: ./actions/zizmor
+        uses: open-edge-platform/geti-ci/actions/zizmor@de9b40c01... # zizmor/v0.1.0
         with:
           scan-scope: ${{ github.event_name == 'pull_request' && 'changed' || 'all' }}
-          severity-level: MEDIUM
-          confidence-level: HIGH
-          fail-on-findings: true
+          severity-level: ${{ github.event_name == 'pull_request' && 'HIGH' || 'LOW' }}
+          fail-on-findings: ${{ github.event_name == 'pull_request' && 'true' || 'false' }}
+```
+
+## Renovate configuration
+
+While Dependabot can update references to these actions, Renovate can't do it out of the box but it can be configured with the following settings (key point is `versioning` flag):
+
+```json
+{
+  "enabled": true,
+  "separateMajorMinor": false,
+  "groupName": "GitHub Actions",
+  "matchManagers": ["github-actions"],
+  "matchPackagePatterns": ["*"],
+  "versioning": "regex:^(?:[^/]+/)?v?(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$",
+  "schedule": ["* * 1 * *"] // every month
+}
 ```
 
 ## Inputs

@@ -1,0 +1,26 @@
+name: Release workflow
+
+# TODO: Maintain floating version tags to allow flexible version pinning,
+# so users can reference actions with major (v1) or minor (v1.2) tags.
+
+on:
+  push:
+    branches:
+      - main
+
+permissions: {} # No permissions by default on workflow level
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Needed to create releases and tags
+      pull-requests: write # Needed to create release PRs
+    steps:
+      - name: Run release-please
+        uses: googleapis/release-please-action@16a9c90856f42705d54a6fda1823352bdc62cf38 # v4.4.0
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          target-branch: ${{ github.ref_name }}
