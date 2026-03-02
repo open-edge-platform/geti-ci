@@ -7,6 +7,11 @@ on:
     paths:
       - "actions/collect-sbom-library/**"
       - ".github/workflows/test-collect-sbom-library-action.yml"
+    types:
+      - edited
+      - opened
+      - ready_for_review
+      - synchronize
   push:
     branches:
       - main

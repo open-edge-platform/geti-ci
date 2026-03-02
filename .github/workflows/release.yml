@@ -24,3 +24,19 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
           target-branch: ${{ github.ref_name }}
+
+      - name: Debug release-please outputs
+        run: |
+          echo "releases_created: ${{ steps.release.outputs.releases_created }}"
+          echo "paths_released: ${{ steps.release.outputs.paths_released }}"
+          echo "--- Full JSON outputs ---"
+          echo '${{ toJSON(steps.release.outputs) }}'
+
+      - name: Delete release (keep tag only)
+        if: ${{ steps.release.outputs['actions/zizmor--release_created'] }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="${{ steps.release.outputs['actions/zizmor--tag_name'] }}"
+          echo "Deleting release: $TAG_NAME"
+          gh release delete "$TAG_NAME" --yes --cleanup-tag=false --repo ${{ github.repository }}

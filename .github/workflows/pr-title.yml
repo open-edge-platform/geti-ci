@@ -2,6 +2,11 @@ name: PR Title
 
 on:
   pull_request:
+    types:
+      - edited
+      - opened
+      - ready_for_review
+      - synchronize
 
 permissions: {} # No permissions by default on workflow level
 
