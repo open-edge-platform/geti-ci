@@ -64,7 +64,7 @@ runs:
           uv sync --frozen --all-extras
         fi
         # renovate: datasource=pypi depName=pip-licenses
-        uv pip install pip-licenses==5.5.0
+        uv pip install pip-licenses==5.5.1
         uv run pip-licenses
         uv run pip-licenses --format=csv --output-file=licenses-library.csv
 
