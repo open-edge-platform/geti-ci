@@ -26,17 +26,22 @@ jobs:
           target-branch: ${{ github.ref_name }}
 
       - name: Debug release-please outputs
+        env:
+          RELEASES_CREATED: ${{ steps.release.outputs.releases_created }}
+          PATHS_RELEASED: ${{ steps.release.outputs.paths_released }}
+          RELEASE_OUTPUTS: ${{ toJSON(steps.release.outputs) }}
         run: |
-          echo "releases_created: ${{ steps.release.outputs.releases_created }}"
-          echo "paths_released: ${{ steps.release.outputs.paths_released }}"
+          echo "releases_created: $RELEASES_CREATED"
+          echo "paths_released: $PATHS_RELEASED"
           echo "--- Full JSON outputs ---"
-          echo '${{ toJSON(steps.release.outputs) }}'
+          echo "$RELEASE_OUTPUTS"
 
       - name: Delete release (keep tag only)
         if: ${{ steps.release.outputs['actions/zizmor--release_created'] }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ steps.release.outputs['actions/zizmor--tag_name'] }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
-          TAG_NAME="${{ steps.release.outputs['actions/zizmor--tag_name'] }}"
           echo "Deleting release: $TAG_NAME"
-          gh release delete "$TAG_NAME" --yes --cleanup-tag=false --repo ${{ github.repository }}
+          gh release delete "$TAG_NAME" --yes --cleanup-tag=false --repo "$GITHUB_REPOSITORY"
