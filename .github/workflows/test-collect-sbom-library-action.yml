@@ -8,10 +8,10 @@ on:
       - "actions/collect-sbom-library/**"
       - ".github/workflows/test-collect-sbom-library-action.yml"
     types:
-      - edited
       - opened
-      - ready_for_review
       - synchronize
+      - reopened
+      - ready_for_review
   push:
     branches:
       - main

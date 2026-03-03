@@ -26,10 +26,10 @@ on:
     paths:
       - ".github/renovate.json5"
     types:
-      - edited
       - opened
-      - ready_for_review
       - synchronize
+      - reopened
+      - ready_for_review
 
 permissions:
   contents: read

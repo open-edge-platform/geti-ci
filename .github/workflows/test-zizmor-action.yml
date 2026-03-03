@@ -9,10 +9,10 @@ on:
       - "actions/zizmor/**"
       - ".github/workflows/test-zizmor-action.yml"
     types:
-      - edited
       - opened
-      - ready_for_review
       - synchronize
+      - reopened
+      - ready_for_review
   push:
     branches:
       - main

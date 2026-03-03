@@ -7,10 +7,10 @@ on:
     branches:
       - main
     types:
-      - edited
       - opened
-      - ready_for_review
       - synchronize
+      - reopened
+      - ready_for_review
 
 permissions: {}
 
