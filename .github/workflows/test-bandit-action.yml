@@ -7,6 +7,11 @@ on:
     paths:
       - "actions/bandit/**"
       - ".github/workflows/test-bandit-action.yml"
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
   push:
     branches:
       - main

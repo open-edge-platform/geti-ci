@@ -8,6 +8,11 @@ on:
     paths:
       - "actions/zizmor/**"
       - ".github/workflows/test-zizmor-action.yml"
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
   push:
     branches:
       - main

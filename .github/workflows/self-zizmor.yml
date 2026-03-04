@@ -11,10 +11,10 @@ on:
     branches:
       - main
     types:
-      - edited
       - opened
-      - ready_for_review
       - synchronize
+      - reopened
+      - ready_for_review
   schedule:
     # Run security checks every day at 2 AM UTC
     - cron: "0 2 * * *"
