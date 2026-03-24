@@ -36,11 +36,21 @@ jobs:
           echo "--- Full JSON outputs ---"
           echo "$RELEASE_OUTPUTS"
 
-      - name: Delete release (keep tag only)
+      - name: Delete release (keep tag only) - zizmor
         if: ${{ steps.release.outputs['actions/zizmor--release_created'] }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ steps.release.outputs['actions/zizmor--tag_name'] }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          echo "Deleting release: $TAG_NAME"
+          gh release delete "$TAG_NAME" --yes --cleanup-tag=false --repo "$GITHUB_REPOSITORY"
+
+      - name: Delete release (keep tag only) - bandit
+        if: ${{ steps.release.outputs['actions/bandit--release_created'] }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ steps.release.outputs['actions/bandit--tag_name'] }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           echo "Deleting release: $TAG_NAME"
