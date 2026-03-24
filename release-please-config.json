@@ -19,6 +19,10 @@
     "actions/zizmor": {
       "package-name": "zizmor",
       "initial-version": "0.1.0"
+    },
+    "actions/bandit": {
+      "package-name": "bandit",
+      "initial-version": "0.1.0"
     }
   },
   "release-type": "simple",
