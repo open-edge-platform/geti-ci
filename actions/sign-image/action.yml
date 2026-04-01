@@ -70,14 +70,14 @@ runs:
       env:
         DIGEST: ${{ steps.get-digest.outputs.digest }}
         IMAGE: ${{ inputs.image-uri }}
-        WORKFLOW_PATH: ${{ github.workflow_ref }}
+        REPOSITORY: ${{ github.repository }}
       run: |
         set -euo pipefail
         echo "Verifying signature for ${IMAGE}@${DIGEST}"
-        echo "Certificate identity: https://github.com/${WORKFLOW_PATH}"
+        echo "Certificate identity pattern: ^https://github\\.com/${REPOSITORY}/\\.github/workflows/.*@refs/.*$"
         echo "OIDC Issuer: https://token.actions.githubusercontent.com"
         cosign verify \
-          --certificate-identity="https://github.com/${WORKFLOW_PATH}" \
+          --certificate-identity-regexp="^https://github\\.com/${REPOSITORY}/\\.github/workflows/.*@refs/.*$" \
           --certificate-oidc-issuer=https://token.actions.githubusercontent.com \
           "${IMAGE}@${DIGEST}"
 
