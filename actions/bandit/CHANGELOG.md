@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/open-edge-platform/geti-ci/compare/bandit/v0.1.0...bandit/v0.1.1) (2026-04-03)
+
+
+### 🔧 Chores
+
+* **deps:** update github actions ([#67](https://github.com/open-edge-platform/geti-ci/issues/67)) ([90a5d42](https://github.com/open-edge-platform/geti-ci/commit/90a5d42c3cab01a95ab8f6bf22fd483bcfc5678b))
+
 ## 0.1.0 (2026-03-24)
 
 
