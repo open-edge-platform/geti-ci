@@ -73,7 +73,7 @@ inputs:
     description: "Semgrep version"
     required: false
     # renovate: datasource=pypi depName=semgrep
-    default: 1.159.0
+    default: 1.161.0
 
 outputs:
   scan_result:
