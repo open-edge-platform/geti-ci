@@ -17,6 +17,11 @@ jobs:
       contents: write # Needed to create releases and tags
       pull-requests: write # Needed to create release PRs
     steps:
+      - name: Harden the runner (audit all outbound calls)
+        uses: step-security/harden-runner@8d3c67de8e2fe68ef647c8db1e6a09f647780f40 # v2.19.0
+        with:
+          egress-policy: audit
+
       - name: Run release-please
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5
         id: release
