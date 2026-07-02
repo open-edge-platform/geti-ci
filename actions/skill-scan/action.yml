@@ -14,6 +14,10 @@ inputs:
     description: "Repo-relative path to the skills root directory"
     required: false
     default: ".agents/skills"
+  scan-scope:
+    description: "Scope of skills to scan: 'all' (find all), 'changed' (git diff only), 'auto' (changed on PRs, all otherwise)"
+    required: false
+    default: "auto"
   # TODO - use tags once available
   # TODO - add Renovate rule to update version or sha
   version:
@@ -50,6 +54,7 @@ runs:
         INPUTS_SEVERITY_LEVEL: ${{ inputs.severity-level }}
         INPUTS_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
         INPUTS_SKILLS_PATH: ${{ inputs.skills-path }}
+        INPUTS_SCAN_SCOPE: ${{ inputs.scan-scope }}
         INPUTS_BASE_REF: ${{ github.base_ref || github.event.repository.default_branch }}
         IS_PR: ${{ github.event_name == 'pull_request' }}
       run: |
@@ -67,15 +72,21 @@ runs:
         INPUTS_SKILLS_PATH="$RESOLVED_SKILLS_PATH"
         REL_SKILLS_PATH="${INPUTS_SKILLS_PATH#${GITHUB_WORKSPACE}/}"
         ESCAPED_REL_PATH=$(printf '%s' "$REL_SKILLS_PATH" | sed 's/[].[]\\*^$|/\\&/g')
-        echo "Scan scope  : $([ "$IS_PR" == "true" ] && echo "changed" || echo "all")"
+        # Resolve effective scan scope
+        case "$INPUTS_SCAN_SCOPE" in
+          all)     USE_CHANGED=false ;;
+          changed) USE_CHANGED=true ;;
+          auto|*)  USE_CHANGED="$IS_PR" ;;
+        esac
+        echo "Scan scope  : $([ "$USE_CHANGED" == "true" ] && echo "changed" || echo "all")"
         echo "Severity    : $INPUTS_SEVERITY_LEVEL"
         echo "Is PR       : $IS_PR"
         echo "Fail on findings: $INPUTS_FAIL_ON_FINDINGS"
-        # Discover skills — changed only for PRs, all otherwise
-        if [[ "$IS_PR" == "true" ]]; then
+        # Discover skills — changed only when USE_CHANGED=true, all otherwise
+        if [[ "$USE_CHANGED" == "true" ]]; then
           # Strip the skills-path prefix from git diff output, take the next component (skill dir)
           SKILLS=$(git diff --name-only "origin/${INPUTS_BASE_REF}" HEAD -- "${INPUTS_SKILLS_PATH}/" \
-            | grep "^${ESCAPED_REL_PATH}/" \
+            | { grep "^${ESCAPED_REL_PATH}/" || true; } \
             | sed "s|^${ESCAPED_REL_PATH}/||" \
             | cut -d/ -f1 \
             | sort -u \

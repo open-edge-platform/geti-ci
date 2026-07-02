@@ -1,4 +1,8 @@
 # Integration tests for Skill Security Scan composite action
+# Tests always pass scan-scope: all so the action uses find-based discovery
+# regardless of whether they are triggered by a pull_request event.
+# This is necessary because test skill fixtures are created dynamically and
+# are not committed to the repository, so git-diff cannot detect them.
 
 name: Test Skill Scan Action
 
@@ -61,6 +65,7 @@ jobs:
         uses: ./actions/skill-scan
         with:
           skills-path: test-skills
+          scan-scope: all
           severity-level: CRITICAL
           fail-on-findings: false
 
@@ -110,6 +115,7 @@ jobs:
         uses: ./actions/skill-scan
         with:
           skills-path: test-skills-empty
+          scan-scope: all
           fail-on-findings: false
 
       - name: Verify exit_code is 0 and report mentions no skills
@@ -156,6 +162,7 @@ jobs:
         continue-on-error: true
         with:
           skills-path: test-skills
+          scan-scope: all
           severity-level: INVALID
 
       - name: Verify the step failed
