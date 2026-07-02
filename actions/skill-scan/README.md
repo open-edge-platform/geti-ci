@@ -10,7 +10,7 @@ This composite action scans AI agent skills using [SkillSpector](https://github.
 
 ## Usage
 
-> [!IMPORTANT]  
+> [!IMPORTANT]
 > This is a monorepo containing several Actions. When we release the Skill Security Scan action, we create a tag `skill-scan/v<version>`, e.g. `skill-scan/v0.1.0`.
 
 Example usage that scans changed skills on PRs and all skills on push/schedule:
@@ -58,10 +58,11 @@ jobs:
 
 ## Outputs
 
-| Name          | Type   | Description                         |
-| ------------- | ------ | ----------------------------------- |
-| `exit_code`   | String | Exit code of the scan step (0 or 1) |
-| `report_path` | String | Path to the generated scan report   |
+| Name                | Type   | Description                                                                                         |
+| ------------------- | ------ | --------------------------------------------------------------------------------------------------- |
+| `exit_code`         | String | Exit code of the scan step: `0` (no action needed) or `1` (findings at or above threshold, and `fail-on-findings: true`) |
+| `findings_exceeded` | String | `true` if any skill's severity met or exceeded the threshold, `false` otherwise — independent of `fail-on-findings` |
+| `report_path`       | String | Path to the generated scan report                                                                   |
 
 ## Severity levels
 
