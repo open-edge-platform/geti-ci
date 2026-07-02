@@ -29,6 +29,9 @@ outputs:
   exit_code:
     description: "Exit code of the scan step"
     value: ${{ steps.run-skillspector.outputs.exit_code }}
+  findings_exceeded:
+    description: "Whether any skill's severity met or exceeded the threshold (true/false), regardless of fail-on-findings"
+    value: ${{ steps.run-skillspector.outputs.findings_exceeded }}
   report_path:
     description: "Path to the generated scan report"
     value: ${{ steps.run-skillspector.outputs.report_path }}
@@ -97,7 +100,7 @@ runs:
           SKILLS=$(find "${INPUTS_SKILLS_PATH}" -mindepth 1 -maxdepth 2 -name SKILL.md -type f | sed 's|/SKILL\.md$||' | sort)
         fi
         {
-          if [[ "$IS_PR" == "true" ]]; then
+          if [[ "$USE_CHANGED" == "true" ]]; then
             echo "SkillSpector Security Scan (Changed Skills)"
           else
             echo "SkillSpector Security Scan (All Skills)"
@@ -176,6 +179,7 @@ runs:
         } > "$REPORT"
         cat "$REPORT"
         echo "report_path=$REPORT" >> $GITHUB_OUTPUT
+        echo "findings_exceeded=$EXCEEDED" >> $GITHUB_OUTPUT
         # Determine exit code based solely on fail-on-findings
         if [[ "$EXCEEDED" == "true" && "$INPUTS_FAIL_ON_FINDINGS" == "true" ]]; then
           echo "exit_code=1" >> $GITHUB_OUTPUT

@@ -254,19 +254,15 @@ jobs:
       - name: Verify issues were detected
         shell: bash
         env:
-          EXIT_CODE: ${{ steps.skill-scan-detection.outputs.exit_code }}
+          FINDINGS_EXCEEDED: ${{ steps.skill-scan-detection.outputs.findings_exceeded }}
           REPORT_PATH: ${{ steps.skill-scan-detection.outputs.report_path }}
         run: |
-          if [[ -z "$EXIT_CODE" ]]; then
-            echo "Error: exit_code output is empty"
-            exit 1
-          fi
-          if [[ "$EXIT_CODE" != "1" ]]; then
-            echo "Error: expected exit_code=1 (findings at or above HIGH), got $EXIT_CODE"
+          if [[ "$FINDINGS_EXCEEDED" != "true" ]]; then
+            echo "Error: expected findings_exceeded=true (HIGH findings detected), got '$FINDINGS_EXCEEDED'"
             cat "$REPORT_PATH"
             exit 1
           fi
-          echo "✅ Detection test passed — SkillSpector flagged the vulnerable skill (exit_code=$EXIT_CODE)"
+          echo "✅ Detection test passed — SkillSpector flagged the vulnerable skill"
 
   # Summary job — single pass/fail gate for all tests
   skill-scan-test-summary:
