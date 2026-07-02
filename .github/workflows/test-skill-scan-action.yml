@@ -1,0 +1,231 @@
+# Integration tests for Skill Security Scan composite action
+
+name: Test Skill Scan Action
+
+on:
+  pull_request:
+    paths:
+      - "actions/skill-scan/**"
+      - ".github/workflows/test-skill-scan-action.yml"
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+  push:
+    branches:
+      - main
+    paths:
+      - "actions/skill-scan/**"
+      - ".github/workflows/test-skill-scan-action.yml"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  # Test 1: Basic functionality — clean skill produces outputs and exits 0
+  skill-scan-basic-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - &harden-runner
+        name: Harden the runner (audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Create a minimal test skill
+        shell: bash
+        run: |
+          mkdir -p test-skills/my-skill
+          cat > test-skills/my-skill/SKILL.md << 'EOF'
+          # My Test Skill
+
+          ## Description
+          Helps users answer questions about programming best practices.
+
+          ## Instructions
+          Answer questions clearly and concisely. Do not execute code on the user's behalf.
+          EOF
+
+      - name: Run Skill Scan — basic
+        id: skill-scan-basic
+        uses: ./actions/skill-scan
+        with:
+          skills-path: test-skills
+          severity-level: CRITICAL
+          fail-on-findings: false
+
+      - name: Verify outputs are set
+        shell: bash
+        env:
+          EXIT_CODE: ${{ steps.skill-scan-basic.outputs.exit_code }}
+          REPORT_PATH: ${{ steps.skill-scan-basic.outputs.report_path }}
+        run: |
+          if [[ -z "$EXIT_CODE" ]]; then
+            echo "Error: exit_code output is empty"
+            exit 1
+          fi
+          if [[ -z "$REPORT_PATH" ]]; then
+            echo "Error: report_path output is empty"
+            exit 1
+          fi
+          if [[ ! -f "$REPORT_PATH" ]]; then
+            echo "Error: report file not found at $REPORT_PATH"
+            exit 1
+          fi
+          echo "exit_code : $EXIT_CODE"
+          echo "report_path: $REPORT_PATH"
+          echo "✅ Basic test passed"
+
+  # Test 2: No skills found — empty skills directory exits 0 with no-scan message
+  skill-scan-no-skills-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - *harden-runner
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Create an empty skills directory (no SKILL.md files)
+        shell: bash
+        run: mkdir -p test-skills-empty/not-a-skill
+
+      - name: Run Skill Scan — no skills
+        id: skill-scan-no-skills
+        uses: ./actions/skill-scan
+        with:
+          skills-path: test-skills-empty
+          fail-on-findings: false
+
+      - name: Verify exit_code is 0 and report mentions no skills
+        shell: bash
+        env:
+          EXIT_CODE: ${{ steps.skill-scan-no-skills.outputs.exit_code }}
+          REPORT_PATH: ${{ steps.skill-scan-no-skills.outputs.report_path }}
+        run: |
+          if [[ "$EXIT_CODE" != "0" ]]; then
+            echo "Error: expected exit_code=0, got $EXIT_CODE"
+            exit 1
+          fi
+          if ! grep -q "No skills to scan" "$REPORT_PATH"; then
+            echo "Error: expected 'No skills to scan' in report"
+            cat "$REPORT_PATH"
+            exit 1
+          fi
+          echo "✅ No-skills test passed"
+
+  # Test 3: Invalid severity-level — action must fail with a clear error
+  skill-scan-invalid-severity-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - *harden-runner
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Create a minimal test skill
+        shell: bash
+        run: |
+          mkdir -p test-skills/my-skill
+          echo "# Test" > test-skills/my-skill/SKILL.md
+
+      - name: Run Skill Scan — invalid severity (expect failure)
+        id: skill-scan-invalid-severity
+        uses: ./actions/skill-scan
+        continue-on-error: true
+        with:
+          skills-path: test-skills
+          severity-level: INVALID
+
+      - name: Verify the step failed
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.skill-scan-invalid-severity.outcome }}
+        run: |
+          if [[ "$OUTCOME" != "failure" ]]; then
+            echo "Error: expected action to fail with invalid severity-level, but outcome was $OUTCOME"
+            exit 1
+          fi
+          echo "✅ Invalid severity-level correctly rejected"
+
+  # Test 4: Path traversal — skills-path outside GITHUB_WORKSPACE must be rejected
+  skill-scan-path-traversal-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - *harden-runner
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Run Skill Scan — path traversal (expect failure)
+        id: skill-scan-path-traversal
+        uses: ./actions/skill-scan
+        continue-on-error: true
+        with:
+          skills-path: "../../"
+
+      - name: Verify the step failed
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.skill-scan-path-traversal.outcome }}
+        run: |
+          if [[ "$OUTCOME" != "failure" ]]; then
+            echo "Error: expected action to fail with out-of-workspace skills-path, but outcome was $OUTCOME"
+            exit 1
+          fi
+          echo "✅ Path traversal correctly rejected"
+
+  # Summary job — single pass/fail gate for all tests
+  skill-scan-test-summary:
+    runs-on: ubuntu-latest
+    needs:
+      - skill-scan-basic-test
+      - skill-scan-no-skills-test
+      - skill-scan-invalid-severity-test
+      - skill-scan-path-traversal-test
+    if: always()
+    steps:
+      - name: Check test results
+        shell: bash
+        env:
+          BASIC: ${{ needs.skill-scan-basic-test.result }}
+          NO_SKILLS: ${{ needs.skill-scan-no-skills-test.result }}
+          INVALID_SEV: ${{ needs.skill-scan-invalid-severity-test.result }}
+          PATH_TRAVERSAL: ${{ needs.skill-scan-path-traversal-test.result }}
+        run: |
+          failed=0
+          [[ "$BASIC"         != "success" ]] && echo "❌ Basic test failed"           && failed=1
+          [[ "$NO_SKILLS"     != "success" ]] && echo "❌ No-skills test failed"        && failed=1
+          [[ "$INVALID_SEV"   != "success" ]] && echo "❌ Invalid severity test failed" && failed=1
+          [[ "$PATH_TRAVERSAL" != "success" ]] && echo "❌ Path traversal test failed"  && failed=1
+          if [[ "$failed" -eq 0 ]]; then
+            echo "✅ All Skill Scan action tests passed successfully!"
+          fi
+          exit "$failed"

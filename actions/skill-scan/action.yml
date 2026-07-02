@@ -1,0 +1,197 @@
+name: "Skill Security Scan"
+description: "Skill Security Scan"
+
+inputs:
+  severity-level:
+    description: "Minimum severity level to fail on (LOW/MEDIUM/HIGH/CRITICAL)."
+    required: false
+    default: "CRITICAL"
+  fail-on-findings:
+    description: "Whether to fail the action if issues at or above severity-level are found"
+    required: false
+    default: "true"
+  skills-path:
+    description: "Repo-relative path to the skills root directory"
+    required: false
+    default: ".agents/skills"
+  # TODO - use tags once available
+  # TODO - add Renovate rule to update version or sha
+  version:
+    description: "SkillSpector pinned commit SHA to install"
+    required: false
+    default: "ab0431ff2a9e9d75ba866f986be17f8600cfd086"
+
+outputs:
+  exit_code:
+    description: "Exit code of the scan step"
+    value: ${{ steps.run-skillspector.outputs.exit_code }}
+  report_path:
+    description: "Path to the generated scan report"
+    value: ${{ steps.run-skillspector.outputs.report_path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      with:
+        python-version: "3.12"
+
+    - name: Install SkillSpector
+      shell: bash
+      env:
+        SKILLSPECTOR_VERSION: ${{ inputs.version }}
+      run: python -m pip install "git+https://github.com/NVIDIA/SkillSpector.git@${SKILLSPECTOR_VERSION}"
+
+    - name: Run SkillSpector scan
+      id: run-skillspector
+      shell: bash
+      env:
+        INPUTS_SEVERITY_LEVEL: ${{ inputs.severity-level }}
+        INPUTS_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+        INPUTS_SKILLS_PATH: ${{ inputs.skills-path }}
+        INPUTS_BASE_REF: ${{ github.base_ref || github.event.repository.default_branch }}
+        IS_PR: ${{ github.event_name == 'pull_request' }}
+      run: |
+        set -o pipefail
+        REPORT="skillspector-report.txt"
+        EXCEEDED=false
+        case "$INPUTS_SEVERITY_LEVEL" in
+          LOW|MEDIUM|HIGH|CRITICAL) ;;
+          *) echo "ERROR: Invalid severity-level '${INPUTS_SEVERITY_LEVEL}'. Must be LOW, MEDIUM, HIGH, or CRITICAL." >&2; exit 1 ;;
+        esac
+        RESOLVED_SKILLS_PATH=$(realpath -m "${INPUTS_SKILLS_PATH}")
+        if [[ "$RESOLVED_SKILLS_PATH" != "${GITHUB_WORKSPACE}/"* ]]; then
+          echo "ERROR: skills-path '${INPUTS_SKILLS_PATH}' resolves outside GITHUB_WORKSPACE." >&2; exit 1
+        fi
+        INPUTS_SKILLS_PATH="$RESOLVED_SKILLS_PATH"
+        REL_SKILLS_PATH="${INPUTS_SKILLS_PATH#${GITHUB_WORKSPACE}/}"
+        ESCAPED_REL_PATH=$(printf '%s' "$REL_SKILLS_PATH" | sed 's/[].[]\\*^$|/\\&/g')
+        echo "Scan scope  : $([ "$IS_PR" == "true" ] && echo "changed" || echo "all")"
+        echo "Severity    : $INPUTS_SEVERITY_LEVEL"
+        echo "Is PR       : $IS_PR"
+        echo "Fail on findings: $INPUTS_FAIL_ON_FINDINGS"
+        # Discover skills — changed only for PRs, all otherwise
+        if [[ "$IS_PR" == "true" ]]; then
+          # Strip the skills-path prefix from git diff output, take the next component (skill dir)
+          SKILLS=$(git diff --name-only "origin/${INPUTS_BASE_REF}" HEAD -- "${INPUTS_SKILLS_PATH}/" \
+            | grep "^${ESCAPED_REL_PATH}/" \
+            | sed "s|^${ESCAPED_REL_PATH}/||" \
+            | cut -d/ -f1 \
+            | sort -u \
+            | while IFS= read -r skill_dir; do
+                [[ -f "${INPUTS_SKILLS_PATH}/${skill_dir}/SKILL.md" ]] && echo "${INPUTS_SKILLS_PATH}/${skill_dir}"
+              done)
+        else
+          SKILLS=$(find "${INPUTS_SKILLS_PATH}" -mindepth 1 -maxdepth 2 -name SKILL.md -type f | sed 's|/SKILL\.md$||' | sort)
+        fi
+        {
+          if [[ "$IS_PR" == "true" ]]; then
+            echo "SkillSpector Security Scan (Changed Skills)"
+          else
+            echo "SkillSpector Security Scan (All Skills)"
+          fi
+          echo "Severity threshold: $INPUTS_SEVERITY_LEVEL"
+          echo ""
+          if [[ -z "$SKILLS" ]]; then
+            echo "No skills to scan."
+          else
+            while IFS= read -r skill; do
+              # Skip if not a valid skill directory
+              if [[ ! -f "$skill/SKILL.md" ]]; then
+                echo "Skipping $skill — no SKILL.md found" >&2
+                continue
+              fi
+              echo "Scanning: $skill" >&2
+              # Always capture output; ignore skillspector's own exit code
+              RESULT=$(skillspector scan "$skill" --no-llm --format json 2>/dev/stderr) || true
+              # Validate we got parseable JSON
+              if ! echo "$RESULT" | jq -e . > /dev/null 2>&1; then
+                echo "---"
+                echo "Skill   : $skill"
+                echo "Status  : ERROR (failed to parse output)"
+                echo "$RESULT" >&2
+                continue
+              fi
+              SCORE=$(echo "$RESULT"     | jq -r '.risk_assessment.score         // 0'    2>/dev/null || echo "0")
+              SKILL_SEV=$(echo "$RESULT" | jq -r '.risk_assessment.severity      // "LOW"' 2>/dev/null || echo "LOW")
+              RECOMMEND=$(echo "$RESULT" | jq -r '.risk_assessment.recommendation // ""'   2>/dev/null || echo "")
+              ISSUES=$(echo "$RESULT"    | jq    '.issues | length'                        2>/dev/null || echo "0")
+              SCORE=${SCORE%.*}
+              echo "---"
+              echo "Skill          : $skill"
+              echo "Score          : $SCORE/100"
+              echo "Severity       : $SKILL_SEV"
+              echo "Recommendation : $RECOMMEND"
+              echo "Issues         : $ISSUES"
+              # If overall skill severity meets threshold, output all issues
+              case "$INPUTS_SEVERITY_LEVEL:$SKILL_SEV" in
+                LOW:*|\
+                MEDIUM:MEDIUM|MEDIUM:HIGH|MEDIUM:CRITICAL|\
+                HIGH:HIGH|HIGH:CRITICAL|\
+                CRITICAL:CRITICAL)
+                  EXCEEDED=true
+                  while IFS= read -r issue; do
+                    ISSUE_SEV=$(echo "$issue"   | jq -r '.severity      // "LOW"' 2>/dev/null)
+                    ISSUE_ID=$(echo "$issue"    | jq -r '.id            // "?"'   2>/dev/null)
+                    CATEGORY=$(echo "$issue"    | jq -r '.category      // ""'    2>/dev/null)
+                    PATTERN=$(echo "$issue"     | jq -r '.pattern       // ""'    2>/dev/null)
+                    CONFIDENCE=$(echo "$issue"  | jq -r '.confidence    // ""'    2>/dev/null)
+                    FINDING=$(echo "$issue"     | jq -r '.finding       // ""'    2>/dev/null)
+                    EXPLAIN=$(echo "$issue"     | jq -r '.explanation   // ""'    2>/dev/null)
+                    REMEDIATE=$(echo "$issue"   | jq -r '.remediation   // ""'    2>/dev/null)
+                    SNIPPET=$(echo "$issue"     | jq -r '.code_snippet  // ""'    2>/dev/null)
+                    FILE=$(echo "$issue"        | jq -r '.location.file       // "N/A"' 2>/dev/null)
+                    LINE=$(echo "$issue"        | jq -r '.location.start_line // ""'    2>/dev/null)
+                    LOC="$FILE"
+                    [[ -n "$LINE" ]] && LOC="$LOC:$LINE"
+                    echo "  [$ISSUE_ID] $CATEGORY — $PATTERN"
+                    echo "  Severity    : $ISSUE_SEV (confidence: $CONFIDENCE)"
+                    echo "  Location    : $LOC"
+                    echo "  Finding     : $FINDING"
+                    echo "  Explanation : $EXPLAIN"
+                    echo "  Remediation : $REMEDIATE"
+                    if [[ -n "$SNIPPET" ]]; then
+                      echo "  Snippet     :"
+                      printf '%s\n' "$SNIPPET" | head -5 | sed 's/^/    /'
+                    fi
+                    echo ""
+                  done < <(echo "$RESULT" | jq -c '.issues[]?' 2>/dev/null)
+                  ;;
+              esac
+            done <<< "$SKILLS"
+          fi
+          echo "---"
+        } > "$REPORT"
+        cat "$REPORT"
+        echo "report_path=$REPORT" >> $GITHUB_OUTPUT
+        # Determine exit code based solely on fail-on-findings
+        if [[ "$EXCEEDED" == "true" && "$INPUTS_FAIL_ON_FINDINGS" == "true" ]]; then
+          echo "exit_code=1" >> $GITHUB_OUTPUT
+        else
+          echo "exit_code=0" >> $GITHUB_OUTPUT
+        fi
+    - name: Upload report
+      if: always() && steps.run-skillspector.outputs.report_path != ''
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: skillspector-reports
+        path: skillspector-report.txt
+        retention-days: 7
+        if-no-files-found: warn
+
+    - name: Complete with exit code
+      if: always()
+      shell: bash
+      env:
+        EXIT_CODE: ${{ steps.run-skillspector.outputs.exit_code }}
+        INPUTS_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+      run: |
+        if [[ "$INPUTS_FAIL_ON_FINDINGS" == "false" ]]; then
+          exit 0
+        elif [[ -n "$EXIT_CODE" ]]; then
+          exit "$EXIT_CODE"
+        else
+          echo "No exit code set, assuming success"
+          exit 0
+        fi
