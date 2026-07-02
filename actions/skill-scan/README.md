@@ -4,8 +4,7 @@ This composite action scans AI agent skills using [SkillSpector](https://github.
 
 ## Features
 
-- On pull requests: scans only the skills changed in the PR
-- On push / schedule: scans all skills under the configured path
+- Configurable scan scope: changed skills only (PR), all skills, or automatic detection
 - Configurable severity threshold and failure behavior
 - Uploads a plain-text report as a workflow artifact
 
@@ -41,18 +40,20 @@ jobs:
       - name: Run Skill Security Scan
         uses: open-edge-platform/geti-ci/actions/skill-scan@<SHA> # skill-scan/v0.1.0
         with:
+          scan-scope: ${{ github.event_name == 'pull_request' && 'changed' || 'all' }}
           severity-level: ${{ github.event_name == 'pull_request' && 'HIGH' || 'LOW' }}
           fail-on-findings: ${{ github.event_name == 'pull_request' && 'true' || 'false' }}
 ```
 
 ## Inputs
 
-| Name               | Type   | Description                                                        | Default                                      | Required |
-| ------------------ | ------ | ------------------------------------------------------------------ | -------------------------------------------- | -------- |
-| `severity-level`   | String | Minimum skill severity level to fail on (LOW/MEDIUM/HIGH/CRITICAL) | `CRITICAL`                                   | No       |
-| `fail-on-findings` | String | Whether to fail the workflow when findings meet the threshold      | `true`                                       | No       |
-| `skills-path`      | String | Repo-relative path to the skills root directory                    | `.agents/skills`                             | No       |
-| `version`          | String | SkillSpector pinned commit SHA to install                          | Updated manually (no releases available yet) | No       |
+| Name               | Type   | Description                                                                                     | Default                                      | Required |
+| ------------------ | ------ | ----------------------------------------------------------------------------------------------- | -------------------------------------------- | -------- |
+| `severity-level`   | String | Minimum skill severity level to fail on (LOW/MEDIUM/HIGH/CRITICAL)                              | `CRITICAL`                                   | No       |
+| `fail-on-findings` | String | Whether to fail the workflow when findings meet the threshold                                   | `true`                                       | No       |
+| `skills-path`      | String | Repo-relative path to the skills root directory                                                 | `.agents/skills`                             | No       |
+| `scan-scope`       | String | Scope of skills to scan: `all` (find all), `changed` (git diff only), `auto` (PR→changed, push→all) | `auto`                                  | No       |
+| `version`          | String | SkillSpector pinned commit SHA to install                                                       | Updated manually (no releases available yet) | No       |
 
 ## Outputs
 
