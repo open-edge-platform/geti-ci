@@ -90,7 +90,9 @@ runs:
         echo "Is PR       : $IS_PR"
         echo "Fail on findings: $INPUTS_FAIL_ON_FINDINGS"
         # Discover skills — changed only when USE_CHANGED=true, all otherwise
-        if [[ "$USE_CHANGED" == "true" ]]; then
+        if [[ ! -d "${INPUTS_SKILLS_PATH}" ]]; then
+          SKILLS=""
+        elif [[ "$USE_CHANGED" == "true" ]]; then
           # Ensure the base ref exists locally; fail explicitly rather than silently producing an empty diff
           if ! git fetch origin "${INPUTS_BASE_REF}" 2>&1; then
             echo "ERROR: Failed to fetch origin/${INPUTS_BASE_REF}. Cannot compute changed skills." >&2

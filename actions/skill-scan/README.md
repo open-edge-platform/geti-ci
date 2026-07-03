@@ -41,6 +41,7 @@ jobs:
       - name: Run Skill Security Scan
         uses: open-edge-platform/geti-ci/actions/skill-scan@<SHA> # skill-scan/v0.1.0
         with:
+          skills-path: .github/skills          # set to your repo's skills root
           scan-scope: ${{ github.event_name == 'pull_request' && 'changed' || 'all' }}
           severity-level: ${{ github.event_name == 'pull_request' && 'HIGH' || 'LOW' }}
           fail-on-findings: ${{ github.event_name == 'pull_request' && 'true' || 'false' }}
@@ -51,8 +52,8 @@ jobs:
 | Name               | Type   | Description                                                                                         | Default                                      | Required |
 | ------------------ | ------ | --------------------------------------------------------------------------------------------------- | -------------------------------------------- | -------- |
 | `severity-level`   | String | Minimum skill severity level to fail on (LOW/MEDIUM/HIGH/CRITICAL)                                  | `CRITICAL`                                   | No       |
-| `fail-on-findings` | String | Whether to fail the workflow when findings meet the threshold                                       | `true`                                       | No       |
-| `skills-path`      | String | Repo-relative path to the skills root directory                                                     | `.agents/skills`                             | No       |
+| `fail-on-findings` | String | Whether to fail the workflow when findings meet the threshold. Must be exactly `true` or `false` — any other value causes an immediate error. | `true` | No |
+| `skills-path`      | String | Repo-relative path to the skills root directory. **Must match where your skills actually live** (e.g. `.github/skills`). If the directory does not exist the action exits successfully with "No skills to scan." | `.agents/skills` | No |
 | `scan-scope`       | String | Scope of skills to scan: `all` (find all), `changed` (git diff only), `auto` (PR→changed, push→all) | `auto`                                       | No       |
 | `version`          | String | SkillSpector pinned commit SHA to install                                                           | Updated manually (no releases available yet) | No       |
 
@@ -61,7 +62,7 @@ jobs:
 | Name                | Type   | Description                                                                                         |
 | ------------------- | ------ | --------------------------------------------------------------------------------------------------- |
 | `exit_code`         | String | Exit code of the scan step: `0` (no action needed) or `1` (findings at or above threshold, and `fail-on-findings: true`) |
-| `findings_exceeded` | String | `true` if any skill's severity met or exceeded the threshold, `false` otherwise — independent of `fail-on-findings` |
+| `findings_exceeded` | String | `true` if any skill's severity met or exceeded the threshold **or** if SkillSpector output could not be parsed, `false` otherwise — independent of `fail-on-findings` |
 | `report_path`       | String | Path to the generated scan report                                                                   |
 
 ## Severity levels
@@ -79,16 +80,44 @@ The threshold is applied to the **overall skill severity** returned by SkillSpec
 
 ## Skills directory layout
 
+Set `skills-path` to the repo-relative path where your skills live. The default (`.agents/skills`) is just a convention — override it to match your repository layout:
+
+```yaml
+with:
+  skills-path: .github/skills   # or .agents/skills, skills/, etc.
+```
+
 Skills must follow this directory structure under `skills-path`:
 
 ```
-.agents/skills/
+<skills-path>/
   my-skill/
     SKILL.md      ← required; presence determines a valid skill directory
     ...
 ```
 
 Each immediate subdirectory containing a `SKILL.md` file is treated as one skill to scan.
+
+If `skills-path` does not exist in the repository the action exits successfully and reports "No skills to scan." rather than failing.
+
+## Changed-scope scans (PR mode)
+
+When `scan-scope` is `changed` (or `auto` on a pull request), the action:
+
+1. Explicitly fetches `origin/<base-ref>` before computing the diff. The step **fails immediately** if the fetch fails, rather than silently producing an empty skill list.
+2. Diffs `origin/<base-ref>...HEAD` using a repo-relative pathspec to find skills that changed in the PR.
+
+This requires `fetch-depth: 0` on the `actions/checkout` step (shown in the example above).
+
+## Error handling
+
+| Situation | Behavior |
+| --------- | -------- |
+| `skills-path` directory does not exist | Exits `0`; reports "No skills to scan." |
+| Base-ref fetch fails (changed scope) | Exits `1` immediately with an error message |
+| SkillSpector output is not valid JSON | Sets `findings_exceeded=true`; continues scanning remaining skills |
+| `fail-on-findings` is not `true` or `false` | Exits `1` immediately with a validation error |
+| `severity-level` is not a valid level | Exits `1` immediately with a validation error |
 
 ## Renovate configuration
 
