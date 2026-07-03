@@ -23,6 +23,10 @@
     "actions/bandit": {
       "package-name": "bandit",
       "initial-version": "0.1.0"
+    },
+    "actions/skill-scan": {
+      "package-name": "skill-scan",
+      "initial-version": "0.1.0"
     }
   },
   "release-type": "simple",
