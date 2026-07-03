@@ -87,6 +87,11 @@ runs:
         echo "Fail on findings: $INPUTS_FAIL_ON_FINDINGS"
         # Discover skills — changed only when USE_CHANGED=true, all otherwise
         if [[ "$USE_CHANGED" == "true" ]]; then
+          # Ensure the base ref exists locally; fail explicitly rather than silently producing an empty diff
+          if ! git fetch origin "${INPUTS_BASE_REF}" 2>&1; then
+            echo "ERROR: Failed to fetch origin/${INPUTS_BASE_REF}. Cannot compute changed skills." >&2
+            exit 1
+          fi
           # Strip the skills-path prefix from git diff output, take the next component (skill dir)
           SKILLS=$(git diff --name-only "origin/${INPUTS_BASE_REF}" HEAD -- "${INPUTS_SKILLS_PATH}/" \
             | { grep "^${ESCAPED_REL_PATH}/" || true; } \
@@ -125,6 +130,8 @@ runs:
                 echo "Skill   : $skill"
                 echo "Status  : ERROR (failed to parse output)"
                 echo "$RESULT" >&2
+                # Treat parse failures as exceeding the threshold so broken scans never silently pass
+                EXCEEDED=true
                 continue
               fi
               SCORE=$(echo "$RESULT"     | jq -r '.risk_assessment.score         // 0'    2>/dev/null || echo "0")
