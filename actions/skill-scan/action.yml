@@ -68,6 +68,10 @@ runs:
           LOW|MEDIUM|HIGH|CRITICAL) ;;
           *) echo "ERROR: Invalid severity-level '${INPUTS_SEVERITY_LEVEL}'. Must be LOW, MEDIUM, HIGH, or CRITICAL." >&2; exit 1 ;;
         esac
+        case "$INPUTS_FAIL_ON_FINDINGS" in
+          true|false) ;;
+          *) echo "ERROR: Invalid fail-on-findings '${INPUTS_FAIL_ON_FINDINGS}'. Must be true or false." >&2; exit 1 ;;
+        esac
         RESOLVED_SKILLS_PATH=$(realpath -m "${INPUTS_SKILLS_PATH}")
         if [[ "$RESOLVED_SKILLS_PATH" != "${GITHUB_WORKSPACE}/"* ]]; then
           echo "ERROR: skills-path '${INPUTS_SKILLS_PATH}' resolves outside GITHUB_WORKSPACE." >&2; exit 1
@@ -93,7 +97,7 @@ runs:
             exit 1
           fi
           # Strip the skills-path prefix from git diff output, take the next component (skill dir)
-          SKILLS=$(git diff --name-only "origin/${INPUTS_BASE_REF}" HEAD -- "${INPUTS_SKILLS_PATH}/" \
+          SKILLS=$(git diff --name-only "origin/${INPUTS_BASE_REF}" HEAD -- "${REL_SKILLS_PATH}/" \
             | { grep "^${ESCAPED_REL_PATH}/" || true; } \
             | sed "s|^${ESCAPED_REL_PATH}/||" \
             | cut -d/ -f1 \
