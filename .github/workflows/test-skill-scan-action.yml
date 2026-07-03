@@ -115,6 +115,7 @@ jobs:
           skills-path: test-skills-empty
           scan-scope: all
           fail-on-findings: false
+          fail-on-no-skills: false
 
       - name: Verify exit_code is 0 and report mentions no skills
         shell: bash
