@@ -18,6 +18,10 @@ inputs:
     description: "Scope of skills to scan: 'all' (find all), 'changed' (git diff only), 'auto' (changed on PRs, all otherwise)"
     required: false
     default: "auto"
+  fail-on-no-skills:
+    description: "Whether to fail if no skills are found at skills-path (catches misconfigured paths). Set to 'false' only for repos that genuinely have no skills."
+    required: false
+    default: "true"
   # TODO - use tags once available
   # TODO - add Renovate rule to update version or sha
   version:
@@ -56,6 +60,7 @@ runs:
       env:
         INPUTS_SEVERITY_LEVEL: ${{ inputs.severity-level }}
         INPUTS_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+        INPUTS_FAIL_ON_NO_SKILLS: ${{ inputs.fail-on-no-skills }}
         INPUTS_SKILLS_PATH: ${{ inputs.skills-path }}
         INPUTS_SCAN_SCOPE: ${{ inputs.scan-scope }}
         INPUTS_BASE_REF: ${{ github.base_ref || github.event.repository.default_branch }}
@@ -71,6 +76,10 @@ runs:
         case "$INPUTS_FAIL_ON_FINDINGS" in
           true|false) ;;
           *) echo "ERROR: Invalid fail-on-findings '${INPUTS_FAIL_ON_FINDINGS}'. Must be true or false." >&2; exit 1 ;;
+        esac
+        case "$INPUTS_FAIL_ON_NO_SKILLS" in
+          true|false) ;;
+          *) echo "ERROR: Invalid fail-on-no-skills '${INPUTS_FAIL_ON_NO_SKILLS}'. Must be true or false." >&2; exit 1 ;;
         esac
         RESOLVED_SKILLS_PATH=$(realpath -m "${INPUTS_SKILLS_PATH}")
         if [[ "$RESOLVED_SKILLS_PATH" != "${GITHUB_WORKSPACE}/"* ]]; then
@@ -92,6 +101,7 @@ runs:
         # Discover skills — changed only when USE_CHANGED=true, all otherwise
         if [[ ! -d "${INPUTS_SKILLS_PATH}" ]]; then
           SKILLS=""
+          echo "::warning::skills-path '${INPUTS_SKILLS_PATH}' does not exist. If your repository has skills, set the skills-path input to the correct location (e.g. skills-path: .github/skills)."
         elif [[ "$USE_CHANGED" == "true" ]]; then
           # Ensure the base ref exists locally; fail explicitly rather than silently producing an empty diff
           if ! git fetch origin "${INPUTS_BASE_REF}" 2>&1; then
@@ -109,7 +119,12 @@ runs:
               done)
         else
           SKILLS=$(find "${INPUTS_SKILLS_PATH}" -mindepth 1 -maxdepth 2 -name SKILL.md -type f | sed 's|/SKILL\.md$||' | sort)
+          if [[ -z "$SKILLS" ]]; then
+            echo "::warning::No skills found in '${INPUTS_SKILLS_PATH}'. The directory exists but contains no SKILL.md files."
+          fi
         fi
+        NO_SKILLS=false
+        [[ -z "$SKILLS" ]] && NO_SKILLS=true
         {
           if [[ "$USE_CHANGED" == "true" ]]; then
             echo "SkillSpector Security Scan (Changed Skills)"
@@ -193,8 +208,10 @@ runs:
         cat "$REPORT"
         echo "report_path=$REPORT" >> $GITHUB_OUTPUT
         echo "findings_exceeded=$EXCEEDED" >> $GITHUB_OUTPUT
-        # Determine exit code based solely on fail-on-findings
+        # Determine exit code
         if [[ "$EXCEEDED" == "true" && "$INPUTS_FAIL_ON_FINDINGS" == "true" ]]; then
+          echo "exit_code=1" >> $GITHUB_OUTPUT
+        elif [[ "$NO_SKILLS" == "true" && "$INPUTS_FAIL_ON_NO_SKILLS" == "true" ]]; then
           echo "exit_code=1" >> $GITHUB_OUTPUT
         else
           echo "exit_code=0" >> $GITHUB_OUTPUT
@@ -214,8 +231,9 @@ runs:
       env:
         EXIT_CODE: ${{ steps.run-skillspector.outputs.exit_code }}
         INPUTS_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+        INPUTS_FAIL_ON_NO_SKILLS: ${{ inputs.fail-on-no-skills }}
       run: |
-        if [[ "$INPUTS_FAIL_ON_FINDINGS" == "false" ]]; then
+        if [[ "$INPUTS_FAIL_ON_FINDINGS" == "false" && "$INPUTS_FAIL_ON_NO_SKILLS" == "false" ]]; then
           exit 0
         elif [[ -n "$EXIT_CODE" ]]; then
           exit "$EXIT_CODE"

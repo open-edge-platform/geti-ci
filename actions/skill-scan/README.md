@@ -55,6 +55,7 @@ jobs:
 | `fail-on-findings` | String | Whether to fail the workflow when findings meet the threshold. Must be exactly `true` or `false` — any other value causes an immediate error. | `true` | No |
 | `skills-path`      | String | Repo-relative path to the skills root directory. **Must match where your skills actually live** (e.g. `.github/skills`). If the directory does not exist the action exits successfully with "No skills to scan." | `.agents/skills` | No |
 | `scan-scope`       | String | Scope of skills to scan: `all` (find all), `changed` (git diff only), `auto` (PR→changed, push→all) | `auto`                                       | No       |
+| `fail-on-no-skills` | String | Whether to fail if no skills are found at `skills-path`. Catches misconfigured paths. Set to `false` only for repos that genuinely have no skills. Must be exactly `true` or `false`. | `true` | No |
 | `version`          | String | SkillSpector pinned commit SHA to install                                                           | Updated manually (no releases available yet) | No       |
 
 ## Outputs
@@ -113,10 +114,12 @@ This requires `fetch-depth: 0` on the `actions/checkout` step (shown in the exam
 
 | Situation | Behavior |
 | --------- | -------- |
-| `skills-path` directory does not exist | Exits `0`; reports "No skills to scan." |
+| `skills-path` directory does not exist | Emits a `::warning::` annotation; exits `1` if `fail-on-no-skills: true` (default) |
+| Directory exists but contains no `SKILL.md` files | Emits a `::warning::` annotation; exits `1` if `fail-on-no-skills: true` (default) |
 | Base-ref fetch fails (changed scope) | Exits `1` immediately with an error message |
 | SkillSpector output is not valid JSON | Sets `findings_exceeded=true`; continues scanning remaining skills |
 | `fail-on-findings` is not `true` or `false` | Exits `1` immediately with a validation error |
+| `fail-on-no-skills` is not `true` or `false` | Exits `1` immediately with a validation error |
 | `severity-level` is not a valid level | Exits `1` immediately with a validation error |
 
 ## Renovate configuration
