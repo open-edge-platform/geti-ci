@@ -200,8 +200,8 @@ runs:
             echo "Validating: $skill" >&2
             echo "---" >> "$REPORT"
             echo "" >> "$REPORT"
-            ./skill-validator check "${FLAGS[@]}" -o markdown "$skill" >> "$REPORT" 2>&1
-            RUN_EXIT=$?
+            RUN_EXIT=0
+            ./skill-validator check "${FLAGS[@]}" -o markdown "$skill" >> "$REPORT" 2>&1 || RUN_EXIT=$?
             echo "" >> "$REPORT"
             [[ $RUN_EXIT -eq 1 ]] && HAS_ERRORS=true
           done <<< "$SKILLS"
