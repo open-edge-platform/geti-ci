@@ -123,8 +123,15 @@ runs:
             echo "::warning::No skills found in '${INPUTS_SKILLS_PATH}'. The directory exists but contains no SKILL.md files."
           fi
         fi
+        # NO_SKILLS is true only when the directory is missing or empty on a full scan.
+        # An empty diff on a changed-scope (PR) scan is not a misconfiguration —
+        # the PR simply didn't touch any skills.
         NO_SKILLS=false
-        [[ -z "$SKILLS" ]] && NO_SKILLS=true
+        if [[ ! -d "${INPUTS_SKILLS_PATH}" ]]; then
+          NO_SKILLS=true
+        elif [[ "$USE_CHANGED" == "false" && -z "$SKILLS" ]]; then
+          NO_SKILLS=true
+        fi
         {
           if [[ "$USE_CHANGED" == "true" ]]; then
             echo "SkillSpector Security Scan (Changed Skills)"

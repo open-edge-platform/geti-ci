@@ -106,16 +106,21 @@ If `skills-path` does not exist in the repository the action exits successfully 
 When `scan-scope` is `changed` (or `auto` on a pull request), the action:
 
 1. Explicitly fetches `origin/<base-ref>` before computing the diff. The step **fails immediately** if the fetch fails, rather than silently producing an empty skill list.
-2. Diffs `origin/<base-ref>...HEAD` using a repo-relative pathspec to find skills that changed in the PR.
+2. Diffs `origin/<base-ref>...HEAD` scoped to `skills-path` (repo-relative) to find skills that have changed files in the PR.
+3. Only skills that both have a `SKILL.md` **and** contain changed files are scanned.
 
 This requires `fetch-depth: 0` on the `actions/checkout` step (shown in the example above).
+
+> [!NOTE]
+> A PR that doesn't touch any skills produces an empty scan list and exits successfully — this is expected, not a misconfiguration. `fail-on-no-skills` does **not** trigger in this case. It only triggers when the `skills-path` directory itself is missing or (on full scans) contains no `SKILL.md` files at all.
 
 ## Error handling
 
 | Situation | Behavior |
 | --------- | -------- |
 | `skills-path` directory does not exist | Emits a `::warning::` annotation; exits `1` if `fail-on-no-skills: true` (default) |
-| Directory exists but contains no `SKILL.md` files | Emits a `::warning::` annotation; exits `1` if `fail-on-no-skills: true` (default) |
+| Directory exists but contains no `SKILL.md` files (full scan) | Emits a `::warning::` annotation; exits `1` if `fail-on-no-skills: true` (default) |
+| PR scan where no skills changed | Exits `0` — expected; `fail-on-no-skills` does not apply |
 | Base-ref fetch fails (changed scope) | Exits `1` immediately with an error message |
 | SkillSpector output is not valid JSON | Sets `findings_exceeded=true`; continues scanning remaining skills |
 | `fail-on-findings` is not `true` or `false` | Exits `1` immediately with a validation error |
