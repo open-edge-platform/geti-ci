@@ -201,15 +201,20 @@ runs:
             echo "---" >> "$REPORT"
             echo "" >> "$REPORT"
             RUN_EXIT=0
-            ./skill-validator check "${FLAGS[@]}" -o markdown "$skill" >> "$REPORT" || RUN_EXIT=$?
+            SKILL_OUT=$(mktemp)
+            ./skill-validator check "${FLAGS[@]}" -o markdown "$skill" > "$SKILL_OUT" || RUN_EXIT=$?
+            grep '^::' "$SKILL_OUT" || true           # emit annotation commands to stdout for real-time GHA processing
+            grep -v '^::' "$SKILL_OUT" >> "$REPORT" || true  # append clean markdown to the report
+            rm -f "$SKILL_OUT"
             echo "" >> "$REPORT"
-            [[ $RUN_EXIT -eq 1 ]] && HAS_ERRORS=true
+            if [[ $RUN_EXIT -eq 1 ]]; then HAS_ERRORS=true; fi
           done <<< "$SKILLS"
           echo "---" >> "$REPORT"
         fi
 
         cat "$REPORT"
-        # Append the markdown report to the GitHub Actions job summary
+        # Append the clean markdown report to the GitHub Actions job summary.
+        # Annotation commands (::warning/error/notice::) are already filtered out of $REPORT.
         cat "$REPORT" >> "$GITHUB_STEP_SUMMARY" || true
         echo "report_path=$REPORT" >> "$GITHUB_OUTPUT"
         echo "has_errors=$HAS_ERRORS"  >> "$GITHUB_OUTPUT"

@@ -261,6 +261,70 @@ jobs:
           fi
           echo "✅ Detection test passed — skill-validator flagged the malformed skill"
 
+  # Test 6: Warnings-only — a skill with only warnings (exit code 2 from skill-validator)
+  # must not cause the action step to fail. This is a regression test for the bug where
+  # GitHub Actions' implicit -e flag caused the bash script to exit with the skill-validator
+  # exit code (2) before the error-accumulation logic could handle it.
+  skill-validator-warnings-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - *harden-runner
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Create a skill that triggers a token-length warning (body > 500 lines)
+        shell: bash
+        run: |
+          mkdir -p test-skills/long-skill
+          {
+            cat << 'EOF'
+          ---
+          name: long-skill
+          description: Helps users understand documentation patterns and best practices for complex systems.
+          ---
+
+          ## Instructions
+
+          Always provide complete and thorough answers when documenting systems.
+
+          EOF
+            # Pad to exceed the 500-line token limit warning threshold
+            seq 1 510 | sed 's/.*/Additional instruction: Follow all established patterns and conventions./'
+          } > test-skills/long-skill/SKILL.md
+
+      - name: Run Skill Validator — warnings only, strict=false (must not fail)
+        id: skill-validator-warnings
+        uses: ./actions/skill-validator
+        with:
+          skills-path: test-skills
+          scan-scope: all
+          strict: "false"
+          fail-on-findings: "false"
+
+      - name: Verify action succeeded with has_errors=false
+        shell: bash
+        env:
+          EXIT_CODE: ${{ steps.skill-validator-warnings.outputs.exit_code }}
+          HAS_ERRORS: ${{ steps.skill-validator-warnings.outputs.has_errors }}
+          REPORT_PATH: ${{ steps.skill-validator-warnings.outputs.report_path }}
+        run: |
+          if [[ "$HAS_ERRORS" == "true" ]]; then
+            echo "Error: expected has_errors=false (warnings only, no errors), got '$HAS_ERRORS'"
+            cat "$REPORT_PATH"
+            exit 1
+          fi
+          if [[ "$EXIT_CODE" != "0" ]]; then
+            echo "Error: expected exit_code=0 (fail-on-findings=false), got '$EXIT_CODE'"
+            exit 1
+          fi
+          echo "✅ Warnings-only test passed — action correctly handled exit code 2 from skill-validator"
+
   # Summary job — single pass/fail gate for all tests
   skill-validator-test-summary:
     runs-on: ubuntu-latest
@@ -270,6 +334,7 @@ jobs:
       - skill-validator-path-traversal-test
       - skill-validator-invalid-input-test
       - skill-validator-detection-test
+      - skill-validator-warnings-test
     if: always()
     steps:
       - name: Check test results
@@ -280,6 +345,7 @@ jobs:
           PATH_TRAVERSAL: ${{ needs.skill-validator-path-traversal-test.result }}
           INVALID_INPUT: ${{ needs.skill-validator-invalid-input-test.result }}
           DETECTION: ${{ needs.skill-validator-detection-test.result }}
+          WARNINGS: ${{ needs.skill-validator-warnings-test.result }}
         run: |
           failed=0
           [[ "$BASIC"          != "success" ]] && echo "❌ Basic test failed"          && failed=1
@@ -287,6 +353,7 @@ jobs:
           [[ "$PATH_TRAVERSAL" != "success" ]] && echo "❌ Path traversal test failed" && failed=1
           [[ "$INVALID_INPUT"  != "success" ]] && echo "❌ Invalid input test failed"  && failed=1
           [[ "$DETECTION"      != "success" ]] && echo "❌ Detection test failed"      && failed=1
+          [[ "$WARNINGS"       != "success" ]] && echo "❌ Warnings-only test failed"  && failed=1
           if [[ "$failed" -eq 0 ]]; then
             echo "✅ All Skill Validator action tests passed successfully!"
           fi
