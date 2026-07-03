@@ -44,13 +44,13 @@ inputs:
 
 outputs:
   exit_code:
-    description: "Exit code of the validation: 0 (clean pass), 1 (errors present), 2 (warnings only)"
+    description: "0 (clean pass or warnings-only with fail-on-findings: false), 1 (errors with fail-on-findings: true, or no skills with fail-on-no-skills: true)"
     value: ${{ steps.run-skill-validator.outputs.exit_code }}
   has_errors:
     description: "Whether any validation errors were found (true/false), independent of fail-on-findings"
     value: ${{ steps.run-skill-validator.outputs.has_errors }}
   report_path:
-    description: "Path to the generated plain-text validation report"
+    description: "Path to the generated Markdown validation report"
     value: ${{ steps.run-skill-validator.outputs.report_path }}
 
 runs:
@@ -62,11 +62,25 @@ runs:
         SKILL_VALIDATOR_VERSION: ${{ inputs.version }}
       run: |
         VERSION="${SKILL_VALIDATOR_VERSION#v}"
-        curl -sSL \
-          "https://github.com/agent-ecosystem/skill-validator/releases/download/v${VERSION}/skill-validator_${VERSION}_linux_amd64.tar.gz" \
-          -o skill-validator.tar.gz
-        tar xzf skill-validator.tar.gz skill-validator
+        # Validate version is a clean semver to prevent path/injection issues
+        if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          echo "ERROR: version '${VERSION}' is not a valid semver (expected X.Y.Z)" >&2
+          exit 1
+        fi
+        BASE_URL="https://github.com/agent-ecosystem/skill-validator/releases/download/v${VERSION}"
+        TARBALL="skill-validator_${VERSION}_linux_amd64.tar.gz"
+        CHECKSUM_FILE="skill-validator_${VERSION}_checksums.txt"
+
+        curl -sSfL "${BASE_URL}/${TARBALL}"       -o "${TARBALL}"
+        curl -sSfL "${BASE_URL}/${CHECKSUM_FILE}" -o "${CHECKSUM_FILE}"
+
+        # Verify SHA-256 digest against the published checksums file.
+        # --fixed-strings prevents version dots from being treated as regex wildcards.
+        grep --fixed-strings "  ${TARBALL}" "${CHECKSUM_FILE}" | sha256sum --check --strict -
+
+        tar xzf "${TARBALL}" skill-validator
         chmod +x skill-validator
+        rm -f "${TARBALL}" "${CHECKSUM_FILE}"
         echo "Installed: $(./skill-validator --version)"
 
     - name: Run skill-validator

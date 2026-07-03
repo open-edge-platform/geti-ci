@@ -7,8 +7,9 @@ This composite action validates AI agent skills using [skill-validator](https://
 - Configurable scan scope: changed skills only (PR), all skills, or automatic detection
 - Configurable check groups: structure, links, content, and contamination analysis
 - Strict mode: treat warnings as errors for a binary pass/fail gate
-- Appends a Markdown report to the GitHub Actions job summary
-- Uploads a plain-text report as a workflow artifact
+- Appends a clean Markdown report to the GitHub Actions job summary (workflow annotation commands are filtered out)
+- Emits `::error::` / `::warning::` annotations in real-time per skill for inline PR diff view
+- Uploads the Markdown report as a workflow artifact
 
 ## What it checks
 
@@ -68,28 +69,39 @@ jobs:
 | `strict`            | String | Treat warnings as errors (exit 1 instead of 2). Must be exactly `true` or `false`. | `false` |
 | `fail-on-findings`  | String | Whether to fail the workflow when validation errors are found. Must be exactly `true` or `false`. | `true` |
 | `fail-on-no-skills` | String | Whether to fail if no skills are found at `skills-path`. Catches misconfigured paths. Set to `false` only for repos that genuinely have no skills. Must be exactly `true` or `false`. | `true` |
-| `emit-annotations`  | String | Emit GitHub Actions `::error::` / `::warning::` annotations for findings, surfacing issues inline in the PR diff view. Must be exactly `true` or `false`. | `true` |
+| `emit-annotations`  | String | Emit GitHub Actions `::error::` / `::warning::` annotations for findings in real-time per skill, surfacing issues inline in the PR diff view. Annotations are separate from the Markdown report so the job summary stays clean. Must be exactly `true` or `false`. | `true` |
 | `version`           | String | skill-validator version to install (e.g. `v1.5.6`) | `v1.5.6` |
 
 ## Outputs
 
 | Name          | Type   | Description |
 | ------------- | ------ | ----------- |
-| `exit_code`   | String | Exit code of the validation: `0` (clean pass), `1` (errors present), `2` (warnings only — requires `strict: false`) |
+| `exit_code`   | String | `0` — clean pass, or warnings-only with `fail-on-findings: false`; `1` — errors found with `fail-on-findings: true`, or no skills with `fail-on-no-skills: true` |
 | `has_errors`  | String | `true` if any validation errors were found, `false` otherwise — independent of `fail-on-findings` |
-| `report_path` | String | Path to the generated plain-text report |
+| `report_path` | String | Path to the generated Markdown report |
 
 ## Exit codes
 
-skill-validator exit codes map as follows:
+The `skill-validator` binary uses these exit codes:
 
-| Exit code | Meaning |
-| --------- | ------- |
+| Binary exit code | Meaning |
+| ---------------- | ------- |
 | `0` | Clean pass — no errors, no warnings |
-| `1` | Validation errors present |
-| `2` | Warnings present, no errors (only returned when `strict: false`) |
+| `1` | Validation errors present (also used for warnings when `strict: true`) |
+| `2` | Warnings present, no errors (only when `strict: false`) |
 
-The action uses the **worst** exit code across all validated skills as the final exit code.
+The action accumulates results across all validated skills and maps them to the `exit_code` output as follows:
+
+| Condition | `exit_code` output | Step result |
+| --------- | ------------------ | ----------- |
+| No errors or warnings | `0` | Success |
+| Warnings only (`strict: false`) | `0` | Success |
+| Errors found, `fail-on-findings: true` | `1` | Failure |
+| No skills found, `fail-on-no-skills: true` | `1` | Failure |
+| Errors found, `fail-on-findings: false` | `0` | Success |
+
+> [!NOTE]
+> The `has_errors` output always reflects whether errors were found, regardless of `fail-on-findings`. Use it for downstream conditional logic when `fail-on-findings: false`.
 
 ## Skills directory layout
 
