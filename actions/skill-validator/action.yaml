@@ -1,0 +1,250 @@
+# Skill Validator Action
+#
+# This composite action validates AI agent skills using skill-validator
+# (https://github.com/agent-ecosystem/skill-validator), checking structure,
+# links, content quality, and cross-language contamination.
+
+name: "Skill Validator"
+description: "Validates AI agent skills using skill-validator (structure, links, content, contamination)"
+
+inputs:
+  skills-path:
+    description: "Repo-relative path to the skills root directory"
+    required: false
+    default: ".agents/skills"
+  scan-scope:
+    description: "Scope of skills to validate: 'all' (find all), 'changed' (git diff only, PR events only), 'auto' (changed on PRs, all on push/schedule)"
+    required: false
+    default: "auto"
+  checks:
+    description: "Comma-separated list of check groups to run (structure,links,content,contamination). Runs all checks if empty."
+    required: false
+    default: ""
+  strict:
+    description: "Treat warnings as errors (exit 1 instead of 2)"
+    required: false
+    default: "false"
+  fail-on-findings:
+    description: "Whether to fail the action if validation errors are found. Must be exactly 'true' or 'false'."
+    required: false
+    default: "true"
+  fail-on-no-skills:
+    description: "Whether to fail if no skills are found at skills-path. Catches misconfigured paths. Set to 'false' only for repos that genuinely have no skills. Must be exactly 'true' or 'false'."
+    required: false
+    default: "true"
+  emit-annotations:
+    description: "Emit GitHub Actions workflow annotations (::error:: / ::warning::) for findings. Surfaces issues inline in the PR diff view."
+    required: false
+    default: "true"
+  version:
+    description: "skill-validator version to install (e.g. v1.5.6)"
+    required: false
+    # renovate: datasource=github-releases depName=agent-ecosystem/skill-validator
+    default: v1.5.6
+
+outputs:
+  exit_code:
+    description: "Exit code of the validation: 0 (clean pass), 1 (errors present), 2 (warnings only)"
+    value: ${{ steps.run-skill-validator.outputs.exit_code }}
+  has_errors:
+    description: "Whether any validation errors were found (true/false), independent of fail-on-findings"
+    value: ${{ steps.run-skill-validator.outputs.has_errors }}
+  report_path:
+    description: "Path to the generated plain-text validation report"
+    value: ${{ steps.run-skill-validator.outputs.report_path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install skill-validator
+      shell: bash
+      env:
+        SKILL_VALIDATOR_VERSION: ${{ inputs.version }}
+      run: |
+        VERSION="${SKILL_VALIDATOR_VERSION#v}"
+        curl -sSL \
+          "https://github.com/agent-ecosystem/skill-validator/releases/download/v${VERSION}/skill-validator_${VERSION}_linux_amd64.tar.gz" \
+          -o skill-validator.tar.gz
+        tar xzf skill-validator.tar.gz skill-validator
+        chmod +x skill-validator
+        echo "Installed: $(./skill-validator --version)"
+
+    - name: Run skill-validator
+      id: run-skill-validator
+      shell: bash
+      env:
+        INPUTS_SKILLS_PATH: ${{ inputs.skills-path }}
+        INPUTS_SCAN_SCOPE: ${{ inputs.scan-scope }}
+        INPUTS_CHECKS: ${{ inputs.checks }}
+        INPUTS_STRICT: ${{ inputs.strict }}
+        INPUTS_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+        INPUTS_FAIL_ON_NO_SKILLS: ${{ inputs.fail-on-no-skills }}
+        INPUTS_EMIT_ANNOTATIONS: ${{ inputs.emit-annotations }}
+        INPUTS_BASE_REF: ${{ github.base_ref }}
+        IS_PR: ${{ github.event_name == 'pull_request' }}
+      run: |
+        set -uo pipefail
+        REPORT="skill-validator-report.txt"
+        HAS_ERRORS=false
+
+        # Validate boolean inputs
+        case "$INPUTS_STRICT" in
+          true|false) ;;
+          *) echo "ERROR: Invalid strict '${INPUTS_STRICT}'. Must be true or false." >&2; exit 1 ;;
+        esac
+        case "$INPUTS_FAIL_ON_FINDINGS" in
+          true|false) ;;
+          *) echo "ERROR: Invalid fail-on-findings '${INPUTS_FAIL_ON_FINDINGS}'. Must be true or false." >&2; exit 1 ;;
+        esac
+        case "$INPUTS_FAIL_ON_NO_SKILLS" in
+          true|false) ;;
+          *) echo "ERROR: Invalid fail-on-no-skills '${INPUTS_FAIL_ON_NO_SKILLS}'. Must be true or false." >&2; exit 1 ;;
+        esac
+        case "$INPUTS_EMIT_ANNOTATIONS" in
+          true|false) ;;
+          *) echo "ERROR: Invalid emit-annotations '${INPUTS_EMIT_ANNOTATIONS}'. Must be true or false." >&2; exit 1 ;;
+        esac
+
+        # Resolve and validate skills-path (path traversal guard)
+        RESOLVED_SKILLS_PATH=$(realpath -m "${INPUTS_SKILLS_PATH}")
+        if [[ "$RESOLVED_SKILLS_PATH" != "${GITHUB_WORKSPACE}/"* ]]; then
+          echo "ERROR: skills-path '${INPUTS_SKILLS_PATH}' resolves outside GITHUB_WORKSPACE." >&2; exit 1
+        fi
+        INPUTS_SKILLS_PATH="$RESOLVED_SKILLS_PATH"
+        REL_SKILLS_PATH="${INPUTS_SKILLS_PATH#${GITHUB_WORKSPACE}/}"
+        ESCAPED_REL_PATH=$(printf '%s' "$REL_SKILLS_PATH" | sed 's/[].[]\\*^$|/\\&/g')
+
+        # Build command flags array
+        FLAGS=()
+        [[ "$INPUTS_STRICT" == "true" ]] && FLAGS+=("--strict")
+        [[ -n "$INPUTS_CHECKS" ]] && FLAGS+=("--only" "$INPUTS_CHECKS")
+        [[ "$INPUTS_EMIT_ANNOTATIONS" == "true" ]] && FLAGS+=("--emit-annotations")
+
+        # Resolve effective scan scope.
+        # Changed-scope diff only applies to pull_request events where a base ref exists.
+        # For push and schedule events the full skills tree is always scanned.
+        if [[ "$IS_PR" != "true" ]]; then
+          USE_CHANGED=false
+          if [[ "$INPUTS_SCAN_SCOPE" == "changed" ]]; then
+            echo "::notice::scan-scope 'changed' is only supported for pull_request events. Using 'all' scope instead."
+          fi
+        else
+          case "$INPUTS_SCAN_SCOPE" in
+            all)           USE_CHANGED=false ;;
+            changed|auto|*) USE_CHANGED=true ;;
+          esac
+        fi
+        echo "Scan scope : $([ "$USE_CHANGED" == "true" ] && echo "changed" || echo "all")"
+        echo "Strict     : $INPUTS_STRICT"
+        echo "Checks     : ${INPUTS_CHECKS:-all}"
+        echo "Is PR      : $IS_PR"
+
+        # Discover skills
+        if [[ ! -d "${INPUTS_SKILLS_PATH}" ]]; then
+          SKILLS=""
+          echo "::warning::skills-path '${INPUTS_SKILLS_PATH}' does not exist. If your repository has skills, set the skills-path input to the correct location (e.g. skills-path: .github/skills)."
+        elif [[ "$USE_CHANGED" == "true" ]]; then
+          # PR mode: fetch the base branch and diff against the merge base (3-dot)
+          # so only changes introduced by the PR are considered.
+          if ! git fetch origin "${INPUTS_BASE_REF}" 2>&1; then
+            echo "ERROR: Failed to fetch origin/${INPUTS_BASE_REF}. Cannot compute changed skills." >&2
+            exit 1
+          fi
+          DIFF_RANGE="origin/${INPUTS_BASE_REF}...HEAD"
+          # Find skill directories that have changed files and contain a SKILL.md
+          SKILLS=$(git diff --name-only "${DIFF_RANGE}" -- "${REL_SKILLS_PATH}/" \
+            | { grep "^${ESCAPED_REL_PATH}/" || true; } \
+            | sed "s|^${ESCAPED_REL_PATH}/||" \
+            | cut -d/ -f1 \
+            | sort -u \
+            | while IFS= read -r skill_dir; do
+                [[ -f "${INPUTS_SKILLS_PATH}/${skill_dir}/SKILL.md" ]] && echo "${INPUTS_SKILLS_PATH}/${skill_dir}"
+              done)
+        else
+          SKILLS=$(find "${INPUTS_SKILLS_PATH}" -mindepth 1 -maxdepth 2 -name SKILL.md -type f \
+            | sed 's|/SKILL\.md$||' | sort)
+          if [[ -z "$SKILLS" ]]; then
+            echo "::warning::No skills found in '${INPUTS_SKILLS_PATH}'. The directory exists but contains no SKILL.md files."
+          fi
+        fi
+
+        # NO_SKILLS is true only when the directory is missing or empty on a full scan.
+        # An empty diff on a changed-scope (PR) scan is not a misconfiguration.
+        NO_SKILLS=false
+        if [[ ! -d "${INPUTS_SKILLS_PATH}" ]]; then
+          NO_SKILLS=true
+        elif [[ "$USE_CHANGED" == "false" && -z "$SKILLS" ]]; then
+          NO_SKILLS=true
+        fi
+
+        # Write report header
+        if [[ "$USE_CHANGED" == "true" ]]; then
+          echo "skill-validator (Changed Skills)" > "$REPORT"
+        else
+          echo "skill-validator (All Skills)" > "$REPORT"
+        fi
+        echo "" >> "$REPORT"
+
+        if [[ -z "$SKILLS" ]]; then
+          echo "No skills to validate." >> "$REPORT"
+        else
+          while IFS= read -r skill; do
+            if [[ ! -d "$skill" ]]; then
+              echo "::warning::Skill directory '$skill' no longer exists, skipping."
+              continue
+            fi
+            if [[ ! -f "$skill/SKILL.md" ]]; then
+              echo "::warning::Skill '$skill' has no SKILL.md, skipping."
+              continue
+            fi
+            echo "Validating: $skill" >&2
+            echo "---" >> "$REPORT"
+            echo "" >> "$REPORT"
+            ./skill-validator check "${FLAGS[@]}" -o markdown "$skill" >> "$REPORT" 2>&1
+            RUN_EXIT=$?
+            echo "" >> "$REPORT"
+            [[ $RUN_EXIT -eq 1 ]] && HAS_ERRORS=true
+          done <<< "$SKILLS"
+          echo "---" >> "$REPORT"
+        fi
+
+        cat "$REPORT"
+        # Append the markdown report to the GitHub Actions job summary
+        cat "$REPORT" >> "$GITHUB_STEP_SUMMARY" || true
+        echo "report_path=$REPORT" >> "$GITHUB_OUTPUT"
+        echo "has_errors=$HAS_ERRORS"  >> "$GITHUB_OUTPUT"
+
+        # Determine final exit code
+        if [[ "$HAS_ERRORS" == "true" && "$INPUTS_FAIL_ON_FINDINGS" == "true" ]]; then
+          echo "exit_code=1" >> "$GITHUB_OUTPUT"
+        elif [[ "$NO_SKILLS" == "true" && "$INPUTS_FAIL_ON_NO_SKILLS" == "true" ]]; then
+          echo "exit_code=1" >> "$GITHUB_OUTPUT"
+        else
+          echo "exit_code=0" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Upload report
+      if: always() && steps.run-skill-validator.outputs.report_path != ''
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      with:
+        name: skill-validator-report
+        path: skill-validator-report.txt
+        retention-days: 7
+        if-no-files-found: warn
+
+    - name: Complete with exit code
+      if: always()
+      shell: bash
+      env:
+        EXIT_CODE: ${{ steps.run-skill-validator.outputs.exit_code }}
+        INPUTS_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+        INPUTS_FAIL_ON_NO_SKILLS: ${{ inputs.fail-on-no-skills }}
+      run: |
+        if [[ "$INPUTS_FAIL_ON_FINDINGS" == "false" && "$INPUTS_FAIL_ON_NO_SKILLS" == "false" ]]; then
+          exit 0
+        elif [[ -n "$EXIT_CODE" ]]; then
+          exit "$EXIT_CODE"
+        else
+          echo "No exit code set, assuming success"
+          exit 0
+        fi
