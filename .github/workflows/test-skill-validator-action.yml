@@ -1,0 +1,360 @@
+# Integration tests for Skill Validator composite action
+# Tests always pass scan-scope: all so the action uses find-based discovery
+# regardless of whether they are triggered by a pull_request event.
+# This is necessary because test skill fixtures are created dynamically and
+# are not committed to the repository, so git-diff cannot detect them.
+
+name: Test Skill Validator Action
+
+on:
+  pull_request:
+    paths:
+      - "actions/skill-validator/**"
+      - ".github/workflows/test-skill-validator-action.yml"
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+  push:
+    branches:
+      - main
+    paths:
+      - "actions/skill-validator/**"
+      - ".github/workflows/test-skill-validator-action.yml"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  # Test 1: Basic functionality — clean skill produces outputs and exits 0
+  skill-validator-basic-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - &harden-runner
+        name: Harden the runner (audit all outbound calls)
+        uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Create a minimal valid test skill
+        shell: bash
+        run: |
+          mkdir -p test-skills/my-skill
+          cat > test-skills/my-skill/SKILL.md << 'EOF'
+          ---
+          name: my-skill
+          description: Helps users answer questions about programming best practices and common patterns.
+          ---
+
+          ## Instructions
+
+          Use clear, concise language when answering programming questions.
+          Always provide code examples to illustrate concepts.
+          Do not execute code on the user's behalf without explicit confirmation.
+          EOF
+
+      - name: Run Skill Validator — basic
+        id: skill-validator-basic
+        uses: ./actions/skill-validator
+        with:
+          skills-path: test-skills
+          scan-scope: all
+          fail-on-findings: false
+          fail-on-no-skills: false
+
+      - name: Verify outputs are set
+        shell: bash
+        env:
+          EXIT_CODE: ${{ steps.skill-validator-basic.outputs.exit_code }}
+          REPORT_PATH: ${{ steps.skill-validator-basic.outputs.report_path }}
+          HAS_ERRORS: ${{ steps.skill-validator-basic.outputs.has_errors }}
+        run: |
+          if [[ -z "$EXIT_CODE" ]]; then
+            echo "Error: exit_code output is empty"
+            exit 1
+          fi
+          if [[ -z "$REPORT_PATH" ]]; then
+            echo "Error: report_path output is empty"
+            exit 1
+          fi
+          if [[ ! -f "$REPORT_PATH" ]]; then
+            echo "Error: report file not found at $REPORT_PATH"
+            exit 1
+          fi
+          echo "exit_code  : $EXIT_CODE"
+          echo "has_errors : $HAS_ERRORS"
+          echo "report_path: $REPORT_PATH"
+          echo "✅ Basic test passed"
+
+  # Test 2: No skills found — empty skills directory exits 0 with no-scan message
+  skill-validator-no-skills-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - *harden-runner
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Create an empty skills directory (no SKILL.md files)
+        shell: bash
+        run: mkdir -p test-skills-empty/not-a-skill
+
+      - name: Run Skill Validator — no skills
+        id: skill-validator-no-skills
+        uses: ./actions/skill-validator
+        with:
+          skills-path: test-skills-empty
+          scan-scope: all
+          fail-on-findings: false
+          fail-on-no-skills: false
+
+      - name: Verify exit_code is 0 and report mentions no skills
+        shell: bash
+        env:
+          EXIT_CODE: ${{ steps.skill-validator-no-skills.outputs.exit_code }}
+          REPORT_PATH: ${{ steps.skill-validator-no-skills.outputs.report_path }}
+        run: |
+          if [[ "$EXIT_CODE" != "0" ]]; then
+            echo "Error: expected exit_code=0, got $EXIT_CODE"
+            exit 1
+          fi
+          if ! grep -q "No skills to validate" "$REPORT_PATH"; then
+            echo "Error: expected 'No skills to validate' in report"
+            cat "$REPORT_PATH"
+            exit 1
+          fi
+          echo "✅ No-skills test passed"
+
+  # Test 3: Path traversal — skills-path outside GITHUB_WORKSPACE must be rejected
+  skill-validator-path-traversal-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - *harden-runner
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Run Skill Validator — path traversal (expect failure)
+        id: skill-validator-path-traversal
+        uses: ./actions/skill-validator
+        continue-on-error: true
+        with:
+          skills-path: "../../"
+
+      - name: Verify the step failed
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.skill-validator-path-traversal.outcome }}
+        run: |
+          if [[ "$OUTCOME" != "failure" ]]; then
+            echo "Error: expected action to fail with out-of-workspace skills-path, but outcome was $OUTCOME"
+            exit 1
+          fi
+          echo "✅ Path traversal correctly rejected"
+
+  # Test 4: Invalid input — invalid strict value must be rejected
+  skill-validator-invalid-input-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - *harden-runner
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Create a minimal test skill
+        shell: bash
+        run: |
+          mkdir -p test-skills/my-skill
+          echo "# Test" > test-skills/my-skill/SKILL.md
+
+      - name: Run Skill Validator — invalid strict value (expect failure)
+        id: skill-validator-invalid-input
+        uses: ./actions/skill-validator
+        continue-on-error: true
+        with:
+          skills-path: test-skills
+          scan-scope: all
+          strict: INVALID
+
+      - name: Verify the step failed
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.skill-validator-invalid-input.outcome }}
+        run: |
+          if [[ "$OUTCOME" != "failure" ]]; then
+            echo "Error: expected action to fail with invalid strict value, but outcome was $OUTCOME"
+            exit 1
+          fi
+          echo "✅ Invalid input correctly rejected"
+
+  # Test 5: Detection — skill with missing frontmatter fields must produce errors
+  skill-validator-detection-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - *harden-runner
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Create a skill with missing required frontmatter fields
+        shell: bash
+        run: |
+          mkdir -p test-skills/broken-skill
+          cat > test-skills/broken-skill/SKILL.md << 'EOF'
+          # Broken Skill
+
+          This skill has no YAML frontmatter with required name and description fields.
+
+          ## Instructions
+
+          Answer questions.
+          EOF
+
+      - name: Run Skill Validator — detection (expect has_errors=true)
+        id: skill-validator-detection
+        uses: ./actions/skill-validator
+        with:
+          skills-path: test-skills
+          scan-scope: all
+          checks: structure
+          fail-on-findings: false
+
+      - name: Verify issues were detected
+        shell: bash
+        env:
+          HAS_ERRORS: ${{ steps.skill-validator-detection.outputs.has_errors }}
+          REPORT_PATH: ${{ steps.skill-validator-detection.outputs.report_path }}
+        run: |
+          if [[ "$HAS_ERRORS" != "true" ]]; then
+            echo "Error: expected has_errors=true (structure errors detected), got '$HAS_ERRORS'"
+            cat "$REPORT_PATH"
+            exit 1
+          fi
+          echo "✅ Detection test passed — skill-validator flagged the malformed skill"
+
+  # Test 6: Warnings-only — a skill with only warnings (exit code 2 from skill-validator)
+  # must not cause the action step to fail. This is a regression test for the bug where
+  # GitHub Actions' implicit -e flag caused the bash script to exit with the skill-validator
+  # exit code (2) before the error-accumulation logic could handle it.
+  skill-validator-warnings-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - *harden-runner
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Create a skill that triggers a token-length warning (body > 500 lines)
+        shell: bash
+        run: |
+          mkdir -p test-skills/long-skill
+          {
+            cat << 'EOF'
+          ---
+          name: long-skill
+          description: Helps users understand documentation patterns and best practices for complex systems.
+          ---
+
+          ## Instructions
+
+          Always provide complete and thorough answers when documenting systems.
+
+          EOF
+            # Pad to exceed the 500-line token limit warning threshold
+            seq 1 510 | sed 's/.*/Additional instruction: Follow all established patterns and conventions./'
+          } > test-skills/long-skill/SKILL.md
+
+      - name: Run Skill Validator — warnings only, strict=false (must not fail)
+        id: skill-validator-warnings
+        uses: ./actions/skill-validator
+        with:
+          skills-path: test-skills
+          scan-scope: all
+          strict: "false"
+          fail-on-findings: "false"
+
+      - name: Verify action succeeded with has_errors=false
+        shell: bash
+        env:
+          EXIT_CODE: ${{ steps.skill-validator-warnings.outputs.exit_code }}
+          HAS_ERRORS: ${{ steps.skill-validator-warnings.outputs.has_errors }}
+          REPORT_PATH: ${{ steps.skill-validator-warnings.outputs.report_path }}
+        run: |
+          if [[ "$HAS_ERRORS" == "true" ]]; then
+            echo "Error: expected has_errors=false (warnings only, no errors), got '$HAS_ERRORS'"
+            cat "$REPORT_PATH"
+            exit 1
+          fi
+          if [[ "$EXIT_CODE" != "0" ]]; then
+            echo "Error: expected exit_code=0 (fail-on-findings=false), got '$EXIT_CODE'"
+            exit 1
+          fi
+          echo "✅ Warnings-only test passed — action correctly handled exit code 2 from skill-validator"
+
+  # Summary job — single pass/fail gate for all tests
+  skill-validator-test-summary:
+    runs-on: ubuntu-latest
+    needs:
+      - skill-validator-basic-test
+      - skill-validator-no-skills-test
+      - skill-validator-path-traversal-test
+      - skill-validator-invalid-input-test
+      - skill-validator-detection-test
+      - skill-validator-warnings-test
+    if: always()
+    steps:
+      - name: Check test results
+        shell: bash
+        env:
+          BASIC: ${{ needs.skill-validator-basic-test.result }}
+          NO_SKILLS: ${{ needs.skill-validator-no-skills-test.result }}
+          PATH_TRAVERSAL: ${{ needs.skill-validator-path-traversal-test.result }}
+          INVALID_INPUT: ${{ needs.skill-validator-invalid-input-test.result }}
+          DETECTION: ${{ needs.skill-validator-detection-test.result }}
+          WARNINGS: ${{ needs.skill-validator-warnings-test.result }}
+        run: |
+          failed=0
+          [[ "$BASIC"          != "success" ]] && echo "❌ Basic test failed"          && failed=1
+          [[ "$NO_SKILLS"      != "success" ]] && echo "❌ No-skills test failed"      && failed=1
+          [[ "$PATH_TRAVERSAL" != "success" ]] && echo "❌ Path traversal test failed" && failed=1
+          [[ "$INVALID_INPUT"  != "success" ]] && echo "❌ Invalid input test failed"  && failed=1
+          [[ "$DETECTION"      != "success" ]] && echo "❌ Detection test failed"      && failed=1
+          [[ "$WARNINGS"       != "success" ]] && echo "❌ Warnings-only test failed"  && failed=1
+          if [[ "$failed" -eq 0 ]]; then
+            echo "✅ All Skill Validator action tests passed successfully!"
+          fi
+          exit "$failed"

@@ -27,6 +27,10 @@
     "actions/skill-scan": {
       "package-name": "skill-scan",
       "initial-version": "0.1.0"
+    },
+    "actions/skill-validator": {
+      "package-name": "skill-validator",
+      "initial-version": "0.1.0"
     }
   },
   "release-type": "simple",
