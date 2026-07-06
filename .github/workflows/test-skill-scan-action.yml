@@ -260,6 +260,81 @@ jobs:
           fi
           echo "✅ Detection test passed — SkillSpector flagged the vulnerable skill"
 
+  # Test 6: Nested layout — skills under bucket subdirectories must all be discovered
+  skill-scan-nested-layout-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - *harden-runner
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Create skills in a nested bucket layout
+        shell: bash
+        run: |
+          mkdir -p test-skills-nested/library/library-skill
+          cat > test-skills-nested/library/library-skill/SKILL.md << 'EOF'
+          # Library Skill
+
+          ## Description
+          Helps users with library operations and best practices.
+
+          ## Instructions
+          Provide clear guidance on library usage patterns.
+          EOF
+
+          mkdir -p test-skills-nested/application/app-skill
+          cat > test-skills-nested/application/app-skill/SKILL.md << 'EOF'
+          # Application Skill
+
+          ## Description
+          Helps users with application development workflows.
+
+          ## Instructions
+          Guide users through application development best practices.
+          EOF
+
+      - name: Run Skill Scan — nested layout (skills-path at root)
+        id: skill-scan-nested
+        uses: ./actions/skill-scan
+        with:
+          skills-path: test-skills-nested
+          scan-scope: all
+          severity-level: CRITICAL
+          fail-on-findings: false
+
+      - name: Verify both nested skills were discovered and scanned
+        shell: bash
+        env:
+          EXIT_CODE: ${{ steps.skill-scan-nested.outputs.exit_code }}
+          REPORT_PATH: ${{ steps.skill-scan-nested.outputs.report_path }}
+        run: |
+          if [[ -z "$EXIT_CODE" ]]; then
+            echo "Error: exit_code output is empty"
+            exit 1
+          fi
+          if grep -q "No skills to scan" "$REPORT_PATH"; then
+            echo "Error: nested skills were not discovered — report says 'No skills to scan'"
+            cat "$REPORT_PATH"
+            exit 1
+          fi
+          if ! grep -q "library-skill" "$REPORT_PATH"; then
+            echo "Error: library-skill was not found in report"
+            cat "$REPORT_PATH"
+            exit 1
+          fi
+          if ! grep -q "app-skill" "$REPORT_PATH"; then
+            echo "Error: app-skill was not found in report"
+            cat "$REPORT_PATH"
+            exit 1
+          fi
+          echo "✅ Nested layout test passed — both bucket skills were discovered and scanned"
+
   # Summary job — single pass/fail gate for all tests
   skill-scan-test-summary:
     runs-on: ubuntu-latest
@@ -269,6 +344,7 @@ jobs:
       - skill-scan-invalid-severity-test
       - skill-scan-path-traversal-test
       - skill-scan-detection-test
+      - skill-scan-nested-layout-test
     if: always()
     steps:
       - name: Check test results
@@ -279,6 +355,7 @@ jobs:
           INVALID_SEV: ${{ needs.skill-scan-invalid-severity-test.result }}
           PATH_TRAVERSAL: ${{ needs.skill-scan-path-traversal-test.result }}
           DETECTION: ${{ needs.skill-scan-detection-test.result }}
+          NESTED_LAYOUT: ${{ needs.skill-scan-nested-layout-test.result }}
         run: |
           failed=0
           [[ "$BASIC"          != "success" ]] && echo "❌ Basic test failed"           && failed=1
@@ -286,6 +363,7 @@ jobs:
           [[ "$INVALID_SEV"    != "success" ]] && echo "❌ Invalid severity test failed" && failed=1
           [[ "$PATH_TRAVERSAL" != "success" ]] && echo "❌ Path traversal test failed"  && failed=1
           [[ "$DETECTION"      != "success" ]] && echo "❌ Detection test failed"        && failed=1
+          [[ "$NESTED_LAYOUT"  != "success" ]] && echo "❌ Nested layout test failed"   && failed=1
           if [[ "$failed" -eq 0 ]]; then
             echo "✅ All Skill Scan action tests passed successfully!"
           fi

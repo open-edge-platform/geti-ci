@@ -97,7 +97,19 @@ Skills must follow this directory structure under `skills-path`:
     ...
 ```
 
-Each immediate subdirectory containing a `SKILL.md` file is treated as one skill to scan.
+Nested layouts with bucket subdirectories are also supported — the action searches recursively for `SKILL.md` at any depth under `skills-path`:
+
+```
+<skills-path>/
+  library/
+    my-skill/
+      SKILL.md
+  application/
+    another-skill/
+      SKILL.md
+```
+
+Each directory containing a `SKILL.md` file at any depth under `skills-path` is treated as one skill to scan.
 
 If `skills-path` does not exist in the repository the action exits successfully and reports "No skills to scan." rather than failing.
 

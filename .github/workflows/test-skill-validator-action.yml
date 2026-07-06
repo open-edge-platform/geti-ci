@@ -325,6 +325,82 @@ jobs:
           fi
           echo "✅ Warnings-only test passed — action correctly handled exit code 2 from skill-validator"
 
+  # Test 7: Nested layout — skills under bucket subdirectories must all be discovered
+  skill-validator-nested-layout-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - *harden-runner
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Create skills in a nested bucket layout
+        shell: bash
+        run: |
+          mkdir -p test-skills-nested/library/library-skill
+          cat > test-skills-nested/library/library-skill/SKILL.md << 'EOF'
+          ---
+          name: library-skill
+          description: Helps users with library operations and software development best practices.
+          ---
+
+          ## Instructions
+
+          Provide clear guidance on library usage patterns.
+          EOF
+
+          mkdir -p test-skills-nested/application/app-skill
+          cat > test-skills-nested/application/app-skill/SKILL.md << 'EOF'
+          ---
+          name: app-skill
+          description: Helps users with application development workflows and common patterns.
+          ---
+
+          ## Instructions
+
+          Guide users through application development best practices.
+          EOF
+
+      - name: Run Skill Validator — nested layout (skills-path at root)
+        id: skill-validator-nested
+        uses: ./actions/skill-validator
+        with:
+          skills-path: test-skills-nested
+          scan-scope: all
+          fail-on-findings: false
+
+      - name: Verify both nested skills were discovered and validated
+        shell: bash
+        env:
+          EXIT_CODE: ${{ steps.skill-validator-nested.outputs.exit_code }}
+          REPORT_PATH: ${{ steps.skill-validator-nested.outputs.report_path }}
+        run: |
+          if [[ -z "$EXIT_CODE" ]]; then
+            echo "Error: exit_code output is empty"
+            exit 1
+          fi
+          if grep -q "No skills to validate" "$REPORT_PATH"; then
+            echo "Error: nested skills were not discovered — report says 'No skills to validate'"
+            cat "$REPORT_PATH"
+            exit 1
+          fi
+          if ! grep -q "library-skill" "$REPORT_PATH"; then
+            echo "Error: library-skill was not found in report"
+            cat "$REPORT_PATH"
+            exit 1
+          fi
+          if ! grep -q "app-skill" "$REPORT_PATH"; then
+            echo "Error: app-skill was not found in report"
+            cat "$REPORT_PATH"
+            exit 1
+          fi
+          echo "✅ Nested layout test passed — both bucket skills were discovered and validated"
+
   # Summary job — single pass/fail gate for all tests
   skill-validator-test-summary:
     runs-on: ubuntu-latest
@@ -335,6 +411,7 @@ jobs:
       - skill-validator-invalid-input-test
       - skill-validator-detection-test
       - skill-validator-warnings-test
+      - skill-validator-nested-layout-test
     if: always()
     steps:
       - name: Check test results
@@ -346,6 +423,7 @@ jobs:
           INVALID_INPUT: ${{ needs.skill-validator-invalid-input-test.result }}
           DETECTION: ${{ needs.skill-validator-detection-test.result }}
           WARNINGS: ${{ needs.skill-validator-warnings-test.result }}
+          NESTED_LAYOUT: ${{ needs.skill-validator-nested-layout-test.result }}
         run: |
           failed=0
           [[ "$BASIC"          != "success" ]] && echo "❌ Basic test failed"          && failed=1
@@ -354,6 +432,7 @@ jobs:
           [[ "$INVALID_INPUT"  != "success" ]] && echo "❌ Invalid input test failed"  && failed=1
           [[ "$DETECTION"      != "success" ]] && echo "❌ Detection test failed"      && failed=1
           [[ "$WARNINGS"       != "success" ]] && echo "❌ Warnings-only test failed"  && failed=1
+          [[ "$NESTED_LAYOUT"  != "success" ]] && echo "❌ Nested layout test failed"  && failed=1
           if [[ "$failed" -eq 0 ]]; then
             echo "✅ All Skill Validator action tests passed successfully!"
           fi
