@@ -108,17 +108,26 @@ runs:
             echo "ERROR: Failed to fetch origin/${INPUTS_BASE_REF}. Cannot compute changed skills." >&2
             exit 1
           fi
-          # Strip the skills-path prefix from git diff output, take the next component (skill dir)
+          # For each changed file under skills-path, walk up to find its skill root (the nearest
+          # ancestor directory that contains a SKILL.md). This handles nested layouts such as
+          # skills/library/<skill>/ as well as flat layouts like skills/<skill>/.
           SKILLS=$(git diff --name-only "origin/${INPUTS_BASE_REF}" HEAD -- "${REL_SKILLS_PATH}/" \
             | { grep "^${ESCAPED_REL_PATH}/" || true; } \
-            | sed "s|^${ESCAPED_REL_PATH}/||" \
-            | cut -d/ -f1 \
-            | sort -u \
-            | while IFS= read -r skill_dir; do
-                [[ -f "${INPUTS_SKILLS_PATH}/${skill_dir}/SKILL.md" ]] && echo "${INPUTS_SKILLS_PATH}/${skill_dir}"
-              done)
+            | while IFS= read -r changed_file; do
+                dir="${GITHUB_WORKSPACE}/${changed_file}"
+                dir="${dir%/*}"
+                while [[ "$dir" != "${INPUTS_SKILLS_PATH}" && "$dir" != "/" ]]; do
+                  if [[ -f "$dir/SKILL.md" ]]; then
+                    echo "$dir"
+                    break
+                  fi
+                  dir="${dir%/*}"
+                done
+              done \
+            | sort -u)
         else
-          SKILLS=$(find "${INPUTS_SKILLS_PATH}" -mindepth 1 -maxdepth 2 -name SKILL.md -type f | sed 's|/SKILL\.md$||' | sort)
+          # Search recursively (no depth limit) so nested layouts like <bucket>/<skill>/SKILL.md are found.
+          SKILLS=$(find "${INPUTS_SKILLS_PATH}" -mindepth 1 -name SKILL.md -type f | sed 's|/SKILL\.md$||' | sort)
           if [[ -z "$SKILLS" ]]; then
             echo "::warning::No skills found in '${INPUTS_SKILLS_PATH}'. The directory exists but contains no SKILL.md files."
           fi
