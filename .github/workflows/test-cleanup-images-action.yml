@@ -1,0 +1,136 @@
+# Integration tests for Cleanup Old Container Images composite action
+# Tests run in dry-run mode against non-existent packages so no real image
+# versions are ever deleted. They validate output wiring and input validation.
+
+name: Test Cleanup Images Action
+
+on:
+  pull_request:
+    paths:
+      - "actions/cleanup-images/**"
+      - ".github/workflows/test-cleanup-images-action.yml"
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+  push:
+    branches:
+      - main
+    paths:
+      - "actions/cleanup-images/**"
+      - ".github/workflows/test-cleanup-images-action.yml"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  # Test 1: Dry-run against non-existent packages produces outputs and deletes nothing
+  cleanup-images-dry-run-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - &harden-runner
+        name: Harden the runner (audit all outbound calls)
+        uses: step-security/harden-runner@bf7454d06d71f1098171f2acdf0cd4708d7b5920 # v2.20.0
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Run cleanup - dry run against non-existent packages
+        id: cleanup
+        uses: ./actions/cleanup-images
+        with:
+          packages: |
+            geti-ci-nonexistent-package-a
+            geti-ci-nonexistent-package-b
+          min-versions-to-keep: 5
+          dry-run: true
+
+      - name: Verify outputs
+        shell: bash
+        env:
+          SCANNED_PACKAGES: ${{ steps.cleanup.outputs.scanned-packages }}
+          RETAINED_RELEASE: ${{ steps.cleanup.outputs.retained-release }}
+          CANDIDATES: ${{ steps.cleanup.outputs.candidates }}
+          DELETED: ${{ steps.cleanup.outputs.deleted }}
+        run: |
+          if [[ "$SCANNED_PACKAGES" != "2" ]]; then
+            echo "Error: expected 2 scanned packages, got '$SCANNED_PACKAGES'"
+            exit 1
+          fi
+          if [[ "$DELETED" != "0" ]]; then
+            echo "Error: dry-run must not delete anything, got deleted='$DELETED'"
+            exit 1
+          fi
+          if [[ -z "$RETAINED_RELEASE" || -z "$CANDIDATES" ]]; then
+            echo "Error: retained-release/candidates outputs are empty"
+            exit 1
+          fi
+          echo "✅ Dry-run test passed (scanned=$SCANNED_PACKAGES, deleted=$DELETED)"
+
+  # Test 2: Invalid min-versions-to-keep must fail the action
+  cleanup-images-validation-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - *harden-runner
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Run cleanup with invalid min-versions-to-keep
+        id: cleanup-invalid
+        continue-on-error: true
+        uses: ./actions/cleanup-images
+        with:
+          packages: geti-ci-nonexistent-package
+          min-versions-to-keep: not-a-number
+          dry-run: true
+
+      - name: Verify action failed on invalid input
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.cleanup-invalid.outcome }}
+        run: |
+          if [[ "$OUTCOME" != "failure" ]]; then
+            echo "Error: expected action to fail on invalid min-versions-to-keep, got outcome='$OUTCOME'"
+            exit 1
+          fi
+          echo "✅ Validation test passed (action failed as expected)"
+
+  # Summary job - provides single point of success/failure
+  cleanup-images-test-summary:
+    runs-on: ubuntu-latest
+    needs:
+      - cleanup-images-dry-run-test
+      - cleanup-images-validation-test
+    if: always()
+    steps:
+      - name: Check test results
+        shell: bash
+        env:
+          TEST_DRY_RUN_RESULT: ${{ needs.cleanup-images-dry-run-test.result }}
+          TEST_VALIDATION_RESULT: ${{ needs.cleanup-images-validation-test.result }}
+        run: |
+          if [[ "$TEST_DRY_RUN_RESULT" != "success" ]]; then
+            echo "❌ Dry-run test failed"
+            exit 1
+          fi
+          if [[ "$TEST_VALIDATION_RESULT" != "success" ]]; then
+            echo "❌ Validation test failed"
+            exit 1
+          fi
+          echo "✅ All Cleanup Images action tests passed successfully!"
