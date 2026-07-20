@@ -20,7 +20,7 @@ description: "Delete old GHCR container image versions while retaining release, 
 
 inputs:
   packages:
-    description: "Space- or newline-separated list of GHCR container package names to clean up"
+    description: "Space or newline-separated list of GHCR container package names to clean up"
     required: true
   min-versions-to-keep:
     description: "Number of most recent non-release image versions to keep per package"
