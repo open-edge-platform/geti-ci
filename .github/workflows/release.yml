@@ -80,3 +80,13 @@ jobs:
         run: |
           echo "Deleting release: $TAG_NAME"
           gh release delete "$TAG_NAME" --yes --cleanup-tag=false --repo "$GITHUB_REPOSITORY"
+
+      - name: Delete release (keep tag only) - cleanup-images
+        if: ${{ steps.release.outputs['actions/cleanup-images--release_created'] }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ steps.release.outputs['actions/cleanup-images--tag_name'] }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          echo "Deleting release: $TAG_NAME"
+          gh release delete "$TAG_NAME" --yes --cleanup-tag=false --repo "$GITHUB_REPOSITORY"

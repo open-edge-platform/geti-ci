@@ -31,6 +31,10 @@
     "actions/skill-validator": {
       "package-name": "skill-validator",
       "initial-version": "0.1.0"
+    },
+    "actions/cleanup-images": {
+      "package-name": "cleanup-images",
+      "initial-version": "0.1.0"
     }
   },
   "release-type": "simple",
