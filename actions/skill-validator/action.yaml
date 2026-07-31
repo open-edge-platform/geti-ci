@@ -36,6 +36,14 @@ inputs:
     description: "Emit GitHub Actions workflow annotations (::error:: / ::warning::) for findings. Surfaces issues inline in the PR diff view."
     required: false
     default: "true"
+  allow-dirs:
+    description: "Comma-separated list of non-standard directory names to accept without warnings (e.g. evals,example-prompts). Passed as --allow-dirs to skill-validator."
+    required: false
+    default: "evals,example-prompts"
+  allow-flat-layouts:
+    description: "Allow files at the skill root without warnings (suppresses 'unexpected file at root' warnings). Passed as --allow-flat-layouts to skill-validator."
+    required: false
+    default: "true"
   version:
     description: "skill-validator version to install (e.g. v1.5.6)"
     required: false
@@ -94,6 +102,8 @@ runs:
         INPUTS_FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
         INPUTS_FAIL_ON_NO_SKILLS: ${{ inputs.fail-on-no-skills }}
         INPUTS_EMIT_ANNOTATIONS: ${{ inputs.emit-annotations }}
+        INPUTS_ALLOW_DIRS: ${{ inputs.allow-dirs }}
+        INPUTS_ALLOW_FLAT_LAYOUTS: ${{ inputs.allow-flat-layouts }}
         INPUTS_BASE_REF: ${{ github.base_ref }}
         IS_PR: ${{ github.event_name == 'pull_request' }}
       run: |
@@ -128,11 +138,19 @@ runs:
         REL_SKILLS_PATH="${INPUTS_SKILLS_PATH#${GITHUB_WORKSPACE}/}"
         ESCAPED_REL_PATH=$(printf '%s' "$REL_SKILLS_PATH" | sed 's/[].[]\\*^$|/\\&/g')
 
+        # Validate allow-flat-layouts boolean
+        case "$INPUTS_ALLOW_FLAT_LAYOUTS" in
+          true|false) ;;
+          *) echo "ERROR: Invalid allow-flat-layouts '${INPUTS_ALLOW_FLAT_LAYOUTS}'. Must be true or false." >&2; exit 1 ;;
+        esac
+
         # Build command flags array
         FLAGS=()
         [[ "$INPUTS_STRICT" == "true" ]] && FLAGS+=("--strict")
         [[ -n "$INPUTS_CHECKS" ]] && FLAGS+=("--only" "$INPUTS_CHECKS")
         [[ "$INPUTS_EMIT_ANNOTATIONS" == "true" ]] && FLAGS+=("--emit-annotations")
+        [[ -n "$INPUTS_ALLOW_DIRS" ]] && FLAGS+=("--allow-dirs=${INPUTS_ALLOW_DIRS}")
+        [[ "$INPUTS_ALLOW_FLAT_LAYOUTS" == "true" ]] && FLAGS+=("--allow-flat-layouts")
 
         # Resolve effective scan scope.
         # Changed-scope diff only applies to pull_request events where a base ref exists.
