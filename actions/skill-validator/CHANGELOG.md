@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/open-edge-platform/geti-ci/compare/skill-validator/v0.1.1...skill-validator/v0.2.0) (2026-07-31)
+
+
+### ✨ Features
+
+* **skill-validator:** `--allow-dirs` and `--allow-flat-layouts` support ([#92](https://github.com/open-edge-platform/geti-ci/issues/92)) ([2413fe5](https://github.com/open-edge-platform/geti-ci/commit/2413fe598569b309099e7b5cd55da6afaf9e4f91))
+
 ## [0.1.1](https://github.com/open-edge-platform/geti-ci/compare/skill-validator/v0.1.0...skill-validator/v0.1.1) (2026-07-10)
 
 
