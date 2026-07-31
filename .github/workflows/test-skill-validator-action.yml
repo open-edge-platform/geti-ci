@@ -304,8 +304,8 @@ jobs:
         with:
           skills-path: test-skills
           scan-scope: all
-          strict: "false"
-          fail-on-findings: "false"
+          strict: false
+          fail-on-findings: false
 
       - name: Verify action succeeded with has_errors=false
         shell: bash
@@ -401,6 +401,133 @@ jobs:
           fi
           echo "✅ Nested layout test passed — both bucket skills were discovered and validated"
 
+  # Test 8: allow-dirs — non-standard directories (evals/, example-prompts/) must not produce warnings
+  # when allow-dirs is set to "evals,example-prompts" (the default).
+  skill-validator-allow-dirs-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - *harden-runner
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Create a skill with non-standard directories (evals/, example-prompts/)
+        shell: bash
+        run: |
+          mkdir -p test-skills/dir-skill/evals
+          mkdir -p test-skills/dir-skill/example-prompts
+          cat > test-skills/dir-skill/SKILL.md << 'EOF'
+          ---
+          name: dir-skill
+          description: Helps users understand testing patterns and best practices for agent skills.
+          ---
+
+          ## Instructions
+
+          Follow the established patterns when writing evaluation test cases.
+          Always include example prompts to illustrate expected behavior.
+          EOF
+          echo "eval case 1" > test-skills/dir-skill/evals/eval1.md
+          echo "eval case 2" > test-skills/dir-skill/evals/eval2.md
+          echo "example prompt" > test-skills/dir-skill/example-prompts/example1.md
+
+      - name: Run Skill Validator — allow-dirs (expect has_errors=false and no unknown-dir warnings)
+        id: skill-validator-allow-dirs
+        uses: ./actions/skill-validator
+        with:
+          skills-path: test-skills
+          scan-scope: all
+          allow-dirs: "evals,example-prompts"
+          checks: structure
+          fail-on-findings: false
+
+      - name: Verify no unknown-directory warnings in report
+        shell: bash
+        env:
+          HAS_ERRORS: ${{ steps.skill-validator-allow-dirs.outputs.has_errors }}
+          REPORT_PATH: ${{ steps.skill-validator-allow-dirs.outputs.report_path }}
+        run: |
+          if [[ "$HAS_ERRORS" == "true" ]]; then
+            echo "Error: expected has_errors=false, got true"
+            cat "$REPORT_PATH"
+            exit 1
+          fi
+          if grep -qi "unknown directory" "$REPORT_PATH"; then
+            echo "Error: unexpected 'unknown directory' warning found in report"
+            cat "$REPORT_PATH"
+            exit 1
+          fi
+          echo "✅ allow-dirs test passed — evals/ and example-prompts/ accepted without warnings"
+
+  # Test 9: allow-flat-layouts — a file at the skill root (e.g. benchmark.md) must not produce
+  # an 'unexpected file at root' warning when allow-flat-layouts=true.
+  skill-validator-allow-flat-layouts-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - *harden-runner
+
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Create a skill with an extra file at root (benchmark.md)
+        shell: bash
+        run: |
+          mkdir -p test-skills/flat-skill
+          cat > test-skills/flat-skill/SKILL.md << 'EOF'
+          ---
+          name: flat-skill
+          description: Helps users understand benchmarking patterns for performance-sensitive workflows.
+          ---
+
+          ## Instructions
+
+          Use the provided benchmark.md reference when evaluating performance trade-offs.
+          Always measure before optimizing to establish a reliable baseline.
+          EOF
+          cat > test-skills/flat-skill/benchmark.md << 'EOF'
+          # Benchmark Reference
+
+          Contains baseline performance data used by the skill.
+          EOF
+
+      - name: Run Skill Validator — allow-flat-layouts=true (expect no root-file warnings)
+        id: skill-validator-allow-flat-layouts
+        uses: ./actions/skill-validator
+        with:
+          skills-path: test-skills
+          scan-scope: all
+          allow-flat-layouts: true
+          checks: structure
+          fail-on-findings: false
+
+      - name: Verify no unexpected-file-at-root warnings in report
+        shell: bash
+        env:
+          HAS_ERRORS: ${{ steps.skill-validator-allow-flat-layouts.outputs.has_errors }}
+          REPORT_PATH: ${{ steps.skill-validator-allow-flat-layouts.outputs.report_path }}
+        run: |
+          if [[ "$HAS_ERRORS" == "true" ]]; then
+            echo "Error: expected has_errors=false, got true"
+            cat "$REPORT_PATH"
+            exit 1
+          fi
+          if grep -qi "unexpected file at root" "$REPORT_PATH"; then
+            echo "Error: unexpected 'unexpected file at root' warning found in report"
+            cat "$REPORT_PATH"
+            exit 1
+          fi
+          echo "✅ allow-flat-layouts test passed — benchmark.md at skill root accepted without warnings"
+
   # Summary job — single pass/fail gate for all tests
   skill-validator-test-summary:
     runs-on: ubuntu-latest
@@ -412,6 +539,8 @@ jobs:
       - skill-validator-detection-test
       - skill-validator-warnings-test
       - skill-validator-nested-layout-test
+      - skill-validator-allow-dirs-test
+      - skill-validator-allow-flat-layouts-test
     if: always()
     steps:
       - name: Check test results
@@ -424,15 +553,19 @@ jobs:
           DETECTION: ${{ needs.skill-validator-detection-test.result }}
           WARNINGS: ${{ needs.skill-validator-warnings-test.result }}
           NESTED_LAYOUT: ${{ needs.skill-validator-nested-layout-test.result }}
+          ALLOW_DIRS: ${{ needs.skill-validator-allow-dirs-test.result }}
+          ALLOW_FLAT_LAYOUTS: ${{ needs.skill-validator-allow-flat-layouts-test.result }}
         run: |
           failed=0
-          [[ "$BASIC"          != "success" ]] && echo "❌ Basic test failed"          && failed=1
-          [[ "$NO_SKILLS"      != "success" ]] && echo "❌ No-skills test failed"      && failed=1
-          [[ "$PATH_TRAVERSAL" != "success" ]] && echo "❌ Path traversal test failed" && failed=1
-          [[ "$INVALID_INPUT"  != "success" ]] && echo "❌ Invalid input test failed"  && failed=1
-          [[ "$DETECTION"      != "success" ]] && echo "❌ Detection test failed"      && failed=1
-          [[ "$WARNINGS"       != "success" ]] && echo "❌ Warnings-only test failed"  && failed=1
-          [[ "$NESTED_LAYOUT"  != "success" ]] && echo "❌ Nested layout test failed"  && failed=1
+          [[ "$BASIC"             != "success" ]] && echo "❌ Basic test failed"              && failed=1
+          [[ "$NO_SKILLS"         != "success" ]] && echo "❌ No-skills test failed"          && failed=1
+          [[ "$PATH_TRAVERSAL"    != "success" ]] && echo "❌ Path traversal test failed"     && failed=1
+          [[ "$INVALID_INPUT"     != "success" ]] && echo "❌ Invalid input test failed"      && failed=1
+          [[ "$DETECTION"         != "success" ]] && echo "❌ Detection test failed"          && failed=1
+          [[ "$WARNINGS"          != "success" ]] && echo "❌ Warnings-only test failed"      && failed=1
+          [[ "$NESTED_LAYOUT"     != "success" ]] && echo "❌ Nested layout test failed"      && failed=1
+          [[ "$ALLOW_DIRS"        != "success" ]] && echo "❌ allow-dirs test failed"         && failed=1
+          [[ "$ALLOW_FLAT_LAYOUTS" != "success" ]] && echo "❌ allow-flat-layouts test failed" && failed=1
           if [[ "$failed" -eq 0 ]]; then
             echo "✅ All Skill Validator action tests passed successfully!"
           fi
