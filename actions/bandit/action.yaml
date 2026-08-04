@@ -61,7 +61,7 @@ runs:
   using: composite
   steps:
     - name: Set up Python
-      uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+      uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
       with:
         python-version: "3.10"
 
@@ -225,7 +225,7 @@ runs:
       # If SARIF is available, upload it considering that for private repos Advanced Security subscription is n/a
       # but will be visible in workflow log
       if: inputs.upload-sarif == 'true' && github.event.repository.private == false && hashFiles('bandit-report.sarif') != ''
-      uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
+      uses: github/codeql-action/upload-sarif@d1ba80a13dd99fba24a470575428917156a28b43 # v4.37.5
       with:
         sarif_file: bandit-report.sarif
         category: bandit
