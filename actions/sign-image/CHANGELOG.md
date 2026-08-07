@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/open-edge-platform/geti-ci/compare/sign-image/v0.1.0...sign-image/v0.1.1) (2026-08-07)
+
+
+### 🔧 Chores
+
+* **deps:** update tools ([#103](https://github.com/open-edge-platform/geti-ci/issues/103)) ([4a5ee79](https://github.com/open-edge-platform/geti-ci/commit/4a5ee79ac847b69a4839315a24a270c2dc63eb19))
+
 ## 0.1.0 (2026-08-07)
 
 
