@@ -4,5 +4,7 @@
   "actions/skill-scan": "0.1.1",
   "actions/skill-validator": "0.2.0",
   "actions/cleanup-images": "0.1.0",
-  "actions/sign-image": "0.1.0"
+  "actions/sign-image": "0.1.0",
+  "actions/cleanup-runner": "0.1.0",
+  "actions/check-paths": "0.1.0"
 }
