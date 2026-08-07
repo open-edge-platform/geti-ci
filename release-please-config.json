@@ -35,6 +35,18 @@
     "actions/cleanup-images": {
       "package-name": "cleanup-images",
       "initial-version": "0.1.0"
+    },
+    "actions/cleanup-runner": {
+      "package-name": "cleanup-runner",
+      "initial-version": "0.1.0"
+    },
+    "actions/sign-image": {
+      "package-name": "sign-image",
+      "initial-version": "0.1.0"
+    },
+    "actions/check-paths": {
+      "package-name": "check-paths",
+      "initial-version": "0.1.0"
     }
   },
   "release-type": "simple",
