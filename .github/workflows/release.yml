@@ -90,3 +90,33 @@ jobs:
         run: |
           echo "Deleting release: $TAG_NAME"
           gh release delete "$TAG_NAME" --yes --cleanup-tag=false --repo "$GITHUB_REPOSITORY"
+
+      - name: Delete release (keep tag only) - cleanup-runner
+        if: ${{ steps.release.outputs['actions/cleanup-runner--release_created'] }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ steps.release.outputs['actions/cleanup-runner--tag_name'] }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          echo "Deleting release: $TAG_NAME"
+          gh release delete "$TAG_NAME" --yes --cleanup-tag=false --repo "$GITHUB_REPOSITORY"
+
+      - name: Delete release (keep tag only) - sign-image
+        if: ${{ steps.release.outputs['actions/sign-image--release_created'] }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ steps.release.outputs['actions/sign-image--tag_name'] }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          echo "Deleting release: $TAG_NAME"
+          gh release delete "$TAG_NAME" --yes --cleanup-tag=false --repo "$GITHUB_REPOSITORY"
+
+      - name: Delete release (keep tag only) - check-paths
+        if: ${{ steps.release.outputs['actions/check-paths--release_created'] }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ steps.release.outputs['actions/check-paths--tag_name'] }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          echo "Deleting release: $TAG_NAME"
+          gh release delete "$TAG_NAME" --yes --cleanup-tag=false --repo "$GITHUB_REPOSITORY"
