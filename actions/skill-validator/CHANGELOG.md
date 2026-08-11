@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/open-edge-platform/geti-ci/compare/skill-validator/v0.2.1...skill-validator/v0.2.2) (2026-08-11)
+
+
+### 🔧 Chores
+
+* add `benchmark` to `allow-dirs` ([#106](https://github.com/open-edge-platform/geti-ci/issues/106)) ([3835b5c](https://github.com/open-edge-platform/geti-ci/commit/3835b5c89df60bd9d1a3ca103f30dae8a3816937))
+
 ## [0.2.1](https://github.com/open-edge-platform/geti-ci/compare/skill-validator/v0.2.0...skill-validator/v0.2.1) (2026-08-07)
 
 
