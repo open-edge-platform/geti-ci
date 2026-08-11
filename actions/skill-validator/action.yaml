@@ -39,7 +39,7 @@ inputs:
   allow-dirs:
     description: "Comma-separated list of non-standard directory names to accept without warnings (e.g. evals,example-prompts). Passed as --allow-dirs to skill-validator."
     required: false
-    default: "evals,example-prompts"
+    default: "benchmark,evals,example-prompts"
   allow-flat-layouts:
     description: "Allow files at the skill root without warnings (suppresses 'unexpected file at root' warnings). Passed as --allow-flat-layouts to skill-validator."
     required: false
