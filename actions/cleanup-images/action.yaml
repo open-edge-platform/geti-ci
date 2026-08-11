@@ -162,9 +162,11 @@ runs:
           protected_digests=()
           protected_sig_tags=()
           if [[ "${#retained_digests[@]}" -gt 0 ]]; then
+            scope="$(printf 'repository:%s/%s:pull' "${OWNER}" "${package}" | jq -sRr @uri)"
             reg_token="$(curl -fsSL -u "x:${GH_TOKEN}" \
-              "https://ghcr.io/token?service=ghcr.io&scope=repository:${OWNER}/${package}:pull" \
+              "https://ghcr.io/token?service=ghcr.io&scope=${scope}" \
               | jq -r '.token // .access_token // empty' || true)"
+            [[ -n "${reg_token}" ]] || echo "::warning::Failed to obtain GHCR registry token for ${OWNER}/${package}; referenced manifests/referrers will not be protected."
             accept='application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json'
             for digest in "${retained_digests[@]}"; do
               [[ -n "${digest}" ]] || continue
