@@ -9,8 +9,12 @@
 # - Release-candidate images (tags matching "X.Y.ZrcN", e.g. 3.0.0rc0) are
 #   NEVER deleted.
 # - The "latest" tag is NEVER deleted.
-# - Among the remaining versions (dev/daily builds and untagged versions) the
-#   most recent `min-versions-to-keep` are kept; older ones are deleted.
+# - Untagged child manifests referenced by a retained index (per-arch layers,
+#   buildx provenance/SBOM attestations) and cosign signatures/attestations of
+#   retained images are NEVER deleted, so retained tags stay pullable.
+# - Among the remaining versions (dev/daily builds and unreferenced untagged
+#   versions) the most recent `min-versions-to-keep` are kept; older ones are
+#   deleted.
 #
 # Supports a dry-run mode (default) that previews deletions without removing
 # anything.
@@ -122,7 +126,7 @@ runs:
                 map(
                   if type=="array" then .[] else . end
                 ) |
-                map({id, tags: (.metadata.container.tags // []), created_at})
+                map({id, name, tags: (.metadata.container.tags // []), created_at})
             '
           )"
 
@@ -131,22 +135,88 @@ runs:
             exit 1
           fi
 
-          # Count release versions retained (semver "X.Y.Z", RC "X.Y.ZrcN" tag or "latest").
+          # Regex matching release ("X.Y.Z") and RC ("X.Y.ZrcN") tags.
+          release_regex='^[0-9]+\.[0-9]+\.[0-9]+(rc[0-9]+)?$'
+
+          # Count release versions retained (release/RC tag or "latest").
           pkg_retained="$(
-            echo "${versions_json}" | jq '[.[]
-              | select(any(.tags[]?;
-                  test("^[0-9]+\\.[0-9]+\\.[0-9]+(rc[0-9]+)?$"; "i") or . == "latest"))] | length'
+            echo "${versions_json}" | jq --arg re "${release_regex}" '[.[]
+              | select(any(.tags[]?; test($re; "i") or . == "latest"))] | length'
           )"
           retained_release=$((retained_release + pkg_retained))
 
-          # Non-release candidates: versions without any release/RC/"latest" tag.
-          # Sorted newest first; the first MIN_VERSIONS_TO_KEEP are kept.
+          # Digests of the retained release/RC/"latest" versions. A tagged
+          # multi-arch image is an OCI index that references untagged child
+          # manifests (per-arch layers, buildx provenance/SBOM attestations).
+          # Those children - and cosign signatures - carry no release tag, so
+          # they must be protected explicitly or the retained index becomes
+          # dangling and unpullable after cleanup.
+          mapfile -t retained_digests < <(
+            echo "${versions_json}" | jq -r --arg re "${release_regex}" '.[]
+              | select(any(.tags[]?; test($re; "i") or . == "latest"))
+              | .name'
+          )
+
+          # Resolve every retained index to the digests it references, plus any
+          # OCI referrers (cosign signatures/attestations stored via referrers).
+          protected_digests=()
+          protected_sig_tags=()
+          if [[ "${#retained_digests[@]}" -gt 0 ]]; then
+            reg_token="$(curl -fsSL -u "x:${GH_TOKEN}" \
+              "https://ghcr.io/token?service=ghcr.io&scope=repository:${OWNER}/${package}:pull" \
+              | jq -r '.token // .access_token // empty' || true)"
+            accept='application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json'
+            for digest in "${retained_digests[@]}"; do
+              [[ -n "${digest}" ]] || continue
+              protected_digests+=("${digest}")
+              # cosign default signature/attestation tags for this digest.
+              hex="${digest#sha256:}"
+              protected_sig_tags+=("sha256-${hex}.sig" "sha256-${hex}.att" "sha256-${hex}.sbom")
+              [[ -n "${reg_token}" ]] || continue
+              manifest="$(curl -fsSL -H "Authorization: Bearer ${reg_token}" -H "Accept: ${accept}" \
+                "https://ghcr.io/v2/${OWNER}/${package_url}/manifests/${digest}" || true)"
+              while read -r child; do
+                [[ -n "${child}" ]] || continue
+                protected_digests+=("${child}")
+                child_hex="${child#sha256:}"
+                protected_sig_tags+=("sha256-${child_hex}.sig" "sha256-${child_hex}.att" "sha256-${child_hex}.sbom")
+              done < <(printf '%s' "${manifest}" | jq -r '.manifests[]?.digest // empty' 2>/dev/null)
+              referrers="$(curl -fsSL -H "Authorization: Bearer ${reg_token}" \
+                -H "Accept: application/vnd.oci.image.index.v1+json" \
+                "https://ghcr.io/v2/${OWNER}/${package_url}/referrers/${digest}" || true)"
+              while read -r child; do
+                [[ -n "${child}" ]] && protected_digests+=("${child}")
+              done < <(printf '%s' "${referrers}" | jq -r '.manifests[]?.digest // empty' 2>/dev/null)
+            done
+          fi
+
+          # Convert the protected sets to JSON arrays for jq filtering.
+          if [[ "${#protected_digests[@]}" -gt 0 ]]; then
+            protected_digests_json="$(printf '%s\n' "${protected_digests[@]}" | jq -Rc . | jq -sc .)"
+          else
+            protected_digests_json='[]'
+          fi
+          if [[ "${#protected_sig_tags[@]}" -gt 0 ]]; then
+            protected_sig_tags_json="$(printf '%s\n' "${protected_sig_tags[@]}" | jq -Rc . | jq -sc .)"
+          else
+            protected_sig_tags_json='[]'
+          fi
+
+          # Non-release candidates: versions that are not release/RC/"latest",
+          # not a manifest referenced by a retained index, and not a cosign
+          # signature/attestation of a protected digest. Sorted newest first;
+          # the first MIN_VERSIONS_TO_KEEP are kept.
           # Each line is "<id>\t<comma-separated tags>".
           mapfile -t old_versions < <(
-            echo "${versions_json}" | jq -r --argjson keep "${MIN_VERSIONS_TO_KEEP}" '
+            echo "${versions_json}" | jq -r \
+              --argjson keep "${MIN_VERSIONS_TO_KEEP}" \
+              --arg re "${release_regex}" \
+              --argjson protected_digests "${protected_digests_json}" \
+              --argjson protected_sig_tags "${protected_sig_tags_json}" '
               [.[]
-                | select((any(.tags[]?;
-                    test("^[0-9]+\\.[0-9]+\\.[0-9]+(rc[0-9]+)?$"; "i") or . == "latest")) | not)]
+                | select((any(.tags[]?; test($re; "i") or . == "latest")) | not)
+                | select((.name as $n | $protected_digests | index($n)) | not)
+                | select((any(.tags[]?; . as $t | $protected_sig_tags | index($t))) | not)]
               | sort_by(.created_at | strptime("%Y-%m-%dT%H:%M:%SZ") | mktime)
               | reverse
               | .[$keep:]
