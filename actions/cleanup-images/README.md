@@ -17,7 +17,9 @@ It replaces per-repository cleanup workflows (such as `cleanup-old-app-images.ym
 - Release images (tags matching semver `X.Y.Z`, e.g. `3.0.0`) are **never** deleted.
 - Release-candidate images (tags matching `X.Y.ZrcN`, e.g. `3.0.0rc0`) are **never** deleted.
 - The `latest` tag is **never** deleted.
-- Among the remaining versions (dev/daily builds and untagged versions) the most recent `min-versions-to-keep` are kept; older ones are deleted.
+- Any tag listed in `extra-retained-tags` (e.g. `develop`) is **never** deleted.
+- Untagged child manifests referenced by a retained index (per-arch layers, buildx provenance/SBOM attestations) and cosign signatures/attestations of retained images are **never** deleted, so retained tags stay pullable.
+- Among the remaining versions (dev/daily builds and unreferenced untagged versions) the most recent `min-versions-to-keep` are kept; older ones are deleted.
 
 ## Usage
 
@@ -76,6 +78,7 @@ jobs:
 | `packages`             | String  | Space- or newline-separated list of GHCR container package names to clean up                          | —                                | Yes      |
 | `min-versions-to-keep` | String  | Number of most recent non-release image versions to keep per package                                  | `10`                             | No       |
 | `dry-run`              | String  | Preview deletions without removing image versions. Must be `true` or `false`                          | `true`                           | No       |
+| `extra-retained-tags`  | String  | Space- or newline-separated additional tags to never delete (e.g. `develop`). Their child manifests are protected too | `""`                             | No       |
 | `owner`                | String  | GHCR package owner (user or organization)                                                             | `${{ github.repository_owner }}` | No       |
 | `token`                | String  | Token with `packages:write` permission used to list and delete package versions                       | `${{ github.token }}`            | No       |
 
@@ -87,6 +90,7 @@ jobs:
 | `retained-release` | String | Number of release versions retained                |
 | `candidates`       | String | Number of versions matched for deletion            |
 | `deleted`          | String | Number of versions deleted (`0` in dry-run mode)   |
+| `candidate-digests`| String | Space-separated digests of versions matched for deletion |
 
 ## Required permissions
 
