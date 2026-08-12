@@ -134,7 +134,9 @@ jobs:
         uses: ./actions/cleanup-images
         with:
           packages: geti-cpu
-          min-versions-to-keep: 5
+          # 0 disables the keep-window so only the manifest-protection guard can
+          # keep a retained image's child manifests off the deletion list.
+          min-versions-to-keep: 0
           dry-run: true
           extra-retained-tags: develop
 
