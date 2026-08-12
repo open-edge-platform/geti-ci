@@ -188,7 +188,8 @@ jobs:
           child_digests=()
           for digest in "${retained[@]}"; do
             [[ -n "${digest}" ]] || continue
-            manifest="$(curl -fsSL -H "Authorization: Bearer ${reg_token}" -H "Accept: ${accept}" \
+            # Omit curl -f so a non-200 yields an empty body jq ignores, not an error.
+            manifest="$(curl -sSL -H "Authorization: Bearer ${reg_token}" -H "Accept: ${accept}" \
               "https://ghcr.io/v2/${OWNER}/${PACKAGE}/manifests/${digest}" || true)"
             while read -r child; do
               [[ -n "${child}" ]] && child_digests+=("${child}")

@@ -12,6 +12,17 @@ It replaces per-repository cleanup workflows (such as `cleanup-old-app-images.ym
 - Dry-run mode (default) previews deletions without removing anything
 - Writes a summary of the cleanup to the workflow run summary
 
+## Prerequisites
+
+The action runs a Bash script and shells out to a few tools that must be available on the runner (all preinstalled on GitHub-hosted `ubuntu-*` runners; install them yourself on custom/self-hosted runners):
+
+- **`bash`** — the action step uses `shell: bash`.
+- **[`gh`](https://cli.github.com/) (GitHub CLI) 2.x+** — lists and deletes package versions via the GitHub API. It reads the token from the `GH_TOKEN` environment variable, which the action sets from the `token` input.
+- **[`jq`](https://jqlang.github.io/jq/) 1.6+** — parses API responses and computes the retention filter (uses `strptime`/`mktime`, `unique`, `@uri`).
+- **[`curl`](https://curl.se/) 7.x+** — resolves retained image manifests and OCI referrers from the GHCR registry to protect child manifests and cosign signatures.
+
+The registry uses the OCI [Referrers API](https://github.com/opencontainers/distribution-spec/blob/main/spec.md#listing-referrers) to discover cosign artifacts; GHCR supports it. If a runner cannot reach `ghcr.io` or the tools are missing, manifest resolution is skipped with a warning and only tag-based protection applies.
+
 ## Retention rules
 
 - Release images (tags matching semver `X.Y.Z`, e.g. `3.0.0`) are **never** deleted.
