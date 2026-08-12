@@ -64,6 +64,9 @@ outputs:
   candidate-digests:
     description: "Space-separated digests of versions matched for deletion across all packages"
     value: ${{ steps.cleanup.outputs.candidate_digests }}
+  protected-tree:
+    description: "Compact JSON array of retained images and their protected child manifests: [{package, tags, digest, children:[...]}]"
+    value: ${{ steps.cleanup.outputs.protected_tree }}
 
 runs:
   using: composite
@@ -107,6 +110,7 @@ runs:
         retained_release=0
         scanned_packages=0
         candidate_digests=()
+        protected_tree_entries=()
 
         owner_type="$(gh api "users/${OWNER}" --jq '.type')"
         if [[ "${owner_type}" == "Organization" ]]; then
@@ -185,8 +189,9 @@ runs:
           tree_lines=()
           if [[ "${#retained_entries[@]}" -gt 0 ]]; then
             scope="$(printf 'repository:%s/%s:pull' "${OWNER}" "${package}" | jq -sRr @uri)"
-            reg_token="$(curl -fsSL -u "x:${GH_TOKEN}" \
-              "https://ghcr.io/token?service=ghcr.io&scope=${scope}" \
+            # Pass credentials via stdin config so they never appear in argv/ps.
+            reg_token="$(printf 'user = "x:%s"\n' "${GH_TOKEN}" \
+              | curl -fsSL --config - "https://ghcr.io/token?service=ghcr.io&scope=${scope}" \
               | jq -r '.token // .access_token // empty' || true)"
             [[ -n "${reg_token}" ]] || echo "::warning::Failed to obtain GHCR registry token for ${OWNER}/${package}; referenced manifests/referrers will not be protected."
             accept='application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json'
@@ -207,18 +212,38 @@ runs:
               # Collect index children and OCI referrers with a type label.
               # Omit curl -f so a non-200 (e.g. GHCR returns 404 for the OCI
               # referrers endpoint) yields an empty body jq ignores, not an error.
+              # The bearer token is passed via stdin config to keep it out of argv.
               child_entries=()
-              manifest="$(curl -sSL -H "Authorization: Bearer ${reg_token}" -H "Accept: ${accept}" \
-                "https://ghcr.io/v2/${OWNER}/${package_url}/manifests/${digest}" || true)"
+              manifest="$(printf 'header = "Authorization: Bearer %s"\n' "${reg_token}" \
+                | curl -sSL --config - -H "Accept: ${accept}" \
+                  "https://ghcr.io/v2/${OWNER}/${package_url}/manifests/${digest}" || true)"
               while read -r child; do
                 [[ -n "${child}" ]] && child_entries+=("child"$'\t'"${child}")
               done < <(printf '%s' "${manifest}" | jq -r '.manifests[]?.digest // empty' 2>/dev/null)
-              referrers="$(curl -sSL -H "Authorization: Bearer ${reg_token}" \
-                -H "Accept: application/vnd.oci.image.index.v1+json" \
-                "https://ghcr.io/v2/${OWNER}/${package_url}/referrers/${digest}" || true)"
+              referrers="$(printf 'header = "Authorization: Bearer %s"\n' "${reg_token}" \
+                | curl -sSL --config - -H "Accept: application/vnd.oci.image.index.v1+json" \
+                  "https://ghcr.io/v2/${OWNER}/${package_url}/referrers/${digest}" || true)"
               while read -r child; do
                 [[ -n "${child}" ]] && child_entries+=("referrer"$'\t'"${child}")
               done < <(printf '%s' "${referrers}" | jq -r '.manifests[]?.digest // empty' 2>/dev/null)
+
+              # Record this retained image's index (kind "child") manifests for
+              # the protected-tree output, keyed by package/tags/digest.
+              entry_child_digests=()
+              for ce in "${child_entries[@]}"; do
+                [[ "${ce%%$'\t'*}" == "child" ]] && entry_child_digests+=("${ce#*$'\t'}")
+              done
+              if [[ "${#entry_child_digests[@]}" -gt 0 ]]; then
+                children_json="$(printf '%s\n' "${entry_child_digests[@]}" | jq -Rc . | jq -sc 'unique')"
+              else
+                children_json='[]'
+              fi
+              protected_tree_entries+=("$(jq -nc \
+                --arg package "${package}" \
+                --arg tags "${retained_tags}" \
+                --arg digest "${digest}" \
+                --argjson children "${children_json}" \
+                '{package: $package, tags: $tags, digest: $digest, children: $children}')")
 
               if [[ "${#child_entries[@]}" -eq 0 ]]; then
                 tree_lines+=("    └─ (no child manifests discovered)")
@@ -310,6 +335,11 @@ runs:
           echo "candidates=${candidates}"
           echo "deleted=${deleted}"
           echo "candidate_digests=${candidate_digests[*]:-}"
+          if [[ "${#protected_tree_entries[@]}" -gt 0 ]]; then
+            echo "protected_tree=$(printf '%s\n' "${protected_tree_entries[@]}" | jq -sc .)"
+          else
+            echo "protected_tree=[]"
+          fi
         } >> "${GITHUB_OUTPUT}"
 
         {

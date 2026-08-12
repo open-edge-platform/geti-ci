@@ -63,15 +63,15 @@ jobs:
           DELETED: ${{ steps.cleanup.outputs.deleted }}
         run: |
           if [[ "$SCANNED_PACKAGES" != "2" ]]; then
-            echo "Error: expected 2 scanned packages, got '$SCANNED_PACKAGES'"
+            echo "::error::expected 2 scanned packages, got '$SCANNED_PACKAGES'"
             exit 1
           fi
           if [[ "$DELETED" != "0" ]]; then
-            echo "Error: dry-run must not delete anything, got deleted='$DELETED'"
+            echo "::error::dry-run must not delete anything, got deleted='$DELETED'"
             exit 1
           fi
           if [[ -z "$RETAINED_RELEASE" || -z "$CANDIDATES" ]]; then
-            echo "Error: retained-release/candidates outputs are empty"
+            echo "::error::retained-release/candidates outputs are empty"
             exit 1
           fi
           echo "✅ Dry-run test passed (scanned=$SCANNED_PACKAGES, deleted=$DELETED)"
@@ -106,7 +106,7 @@ jobs:
           OUTCOME: ${{ steps.cleanup-invalid.outcome }}
         run: |
           if [[ "$OUTCOME" != "failure" ]]; then
-            echo "Error: expected action to fail on invalid min-versions-to-keep, got outcome='$OUTCOME'"
+            echo "::error::expected action to fail on invalid min-versions-to-keep, got outcome='$OUTCOME'"
             exit 1
           fi
           echo "✅ Validation test passed (action failed as expected)"
@@ -176,8 +176,9 @@ jobs:
             exit 0
           fi
 
-          reg_token="$(curl -fsSL -u "x:${GH_TOKEN}" \
-            "https://ghcr.io/token?service=ghcr.io&scope=repository:${OWNER}/${PACKAGE}:pull" \
+          # Pass credentials via stdin config so they never appear in argv/ps.
+          reg_token="$(printf 'user = "x:%s"\n' "${GH_TOKEN}" \
+            | curl -fsSL --config - "https://ghcr.io/token?service=ghcr.io&scope=repository:${OWNER}/${PACKAGE}:pull" \
             | jq -r '.token // .access_token // empty' || true)"
           if [[ -z "${reg_token}" ]]; then
             echo "::notice::Could not obtain a registry pull token; skipping guard assertion."
@@ -189,8 +190,10 @@ jobs:
           for digest in "${retained[@]}"; do
             [[ -n "${digest}" ]] || continue
             # Omit curl -f so a non-200 yields an empty body jq ignores, not an error.
-            manifest="$(curl -sSL -H "Authorization: Bearer ${reg_token}" -H "Accept: ${accept}" \
-              "https://ghcr.io/v2/${OWNER}/${PACKAGE}/manifests/${digest}" || true)"
+            # Bearer token via stdin config to keep it out of argv.
+            manifest="$(printf 'header = "Authorization: Bearer %s"\n' "${reg_token}" \
+              | curl -sSL --config - -H "Accept: ${accept}" \
+                "https://ghcr.io/v2/${OWNER}/${PACKAGE}/manifests/${digest}" || true)"
             while read -r child; do
               [[ -n "${child}" ]] && child_digests+=("${child}")
             done < <(printf '%s' "${manifest}" | jq -r '.manifests[]?.digest // empty' 2>/dev/null)
@@ -202,19 +205,87 @@ jobs:
             exit 0
           fi
 
+          # Index the deletion candidates into a set for O(1) membership checks.
+          declare -A candidate_set=()
+          for candidate in "${candidates[@]:-}"; do
+            [[ -n "${candidate}" ]] && candidate_set["${candidate}"]=1
+          done
+
           fail=0
           for child in "${child_digests[@]}"; do
-            for candidate in "${candidates[@]:-}"; do
-              if [[ "${child}" == "${candidate}" ]]; then
-                echo "::error::Child manifest ${child} of a retained image is a deletion candidate!"
-                fail=1
-              fi
-            done
+            if [[ -n "${candidate_set[${child}]:-}" ]]; then
+              echo "::error::Child manifest ${child} of a retained image is a deletion candidate!"
+              fail=1
+            fi
           done
           if [[ "${fail}" -ne 0 ]]; then
             exit 1
           fi
           echo "✅ Guard test passed: no child manifest of a retained image is a deletion candidate."
+
+      - name: Verify develop child manifests match action's protected set
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+          PACKAGE: geti-cpu
+          PROTECTED_TREE: ${{ steps.cleanup.outputs.protected-tree }}
+        run: |
+          set -euo pipefail
+          accept='application/vnd.oci.image.index.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json'
+
+          if ! gh api "orgs/${OWNER}/packages/container/${PACKAGE}" >/dev/null 2>&1; then
+            echo "::notice::Package ${PACKAGE} not accessible; skipping develop equality assertion."
+            exit 0
+          fi
+
+          # Resolve the digest of the image tagged 'develop'.
+          develop_digest="$(
+            gh api --paginate "orgs/${OWNER}/packages/container/${PACKAGE}/versions?per_page=100" \
+              | jq -sr 'map(if type=="array" then .[] else . end)
+                        | map({name, tags: (.metadata.container.tags // [])})
+                        | .[] | select(any(.tags[]?; . == "develop")) | .name' \
+              | head -n1
+          )"
+          if [[ -z "${develop_digest}" ]]; then
+            echo "::notice::No 'develop' tag found for ${PACKAGE}; skipping develop equality assertion."
+            exit 0
+          fi
+          echo "develop index digest: ${develop_digest}"
+
+          # Pass credentials via stdin config so they never appear in argv/ps.
+          reg_token="$(printf 'user = "x:%s"\n' "${GH_TOKEN}" \
+            | curl -fsSL --config - "https://ghcr.io/token?service=ghcr.io&scope=repository:${OWNER}/${PACKAGE}:pull" \
+            | jq -r '.token // .access_token // empty' || true)"
+          if [[ -z "${reg_token}" ]]; then
+            echo "::notice::Could not obtain a registry pull token; skipping develop equality assertion."
+            exit 0
+          fi
+
+          # List 1: develop child manifests resolved independently via the registry API.
+          # Bearer token via stdin config to keep it out of argv.
+          api_children="$(
+            printf 'header = "Authorization: Bearer %s"\n' "${reg_token}" \
+              | curl -sSL --config - -H "Accept: ${accept}" \
+                "https://ghcr.io/v2/${OWNER}/${PACKAGE}/manifests/${develop_digest}" \
+              | jq -c '[.manifests[]?.digest] | unique'
+          )"
+
+          # List 2: develop child manifests the action reported as protected.
+          action_children="$(
+            printf '%s' "${PROTECTED_TREE}" \
+              | jq -c '[.[] | select((.tags | split(",")) | index("develop")) | .children[]] | unique'
+          )"
+
+          echo "API-resolved develop children:      ${api_children}"
+          echo "Action-protected develop children:  ${action_children}"
+
+          if [[ "${api_children}" != "${action_children}" ]]; then
+            echo "::error::develop child manifests differ between the registry API and the action's protected set."
+            exit 1
+          fi
+          count="$(printf '%s' "${api_children}" | jq 'length')"
+          echo "✅ develop equality test passed: ${count} protected child manifest(s) match the registry."
 
   # Summary job - provides single point of success/failure
   cleanup-images-test-summary:
@@ -233,15 +304,15 @@ jobs:
           TEST_CHILD_GUARD_RESULT: ${{ needs.cleanup-images-child-guard-test.result }}
         run: |
           if [[ "$TEST_DRY_RUN_RESULT" != "success" ]]; then
-            echo "❌ Dry-run test failed"
+            echo "::error::Dry-run test failed"
             exit 1
           fi
           if [[ "$TEST_VALIDATION_RESULT" != "success" ]]; then
-            echo "❌ Validation test failed"
+            echo "::error::Validation test failed"
             exit 1
           fi
           if [[ "$TEST_CHILD_GUARD_RESULT" != "success" ]]; then
-            echo "❌ Child-manifest guard test failed"
+            echo "::error::Child-manifest guard test failed"
             exit 1
           fi
           echo "✅ All Cleanup Images action tests passed successfully!"
