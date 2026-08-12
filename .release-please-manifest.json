@@ -3,7 +3,7 @@
   "actions/bandit": "0.1.2",
   "actions/skill-scan": "0.1.1",
   "actions/skill-validator": "0.2.2",
-  "actions/cleanup-images": "0.1.0",
+  "actions/cleanup-images": "0.1.1",
   "actions/sign-image": "0.1.1",
   "actions/cleanup-runner": "0.1.0",
   "actions/check-paths": "0.1.0"
