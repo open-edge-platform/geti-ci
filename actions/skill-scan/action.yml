@@ -188,7 +188,9 @@ runs:
                 MEDIUM:MEDIUM|MEDIUM:HIGH|MEDIUM:CRITICAL|\
                 HIGH:HIGH|HIGH:CRITICAL|\
                 CRITICAL:CRITICAL)
-                  EXCEEDED=true
+                  # Only flag as exceeding the threshold when there are actual findings;
+                  # a clean skill carries a baseline LOW severity with zero issues.
+                  [[ "$ISSUES" -gt 0 ]] && EXCEEDED=true
                   while IFS= read -r issue; do
                     ISSUE_SEV=$(echo "$issue"   | jq -r '.severity      // "LOW"' 2>/dev/null)
                     ISSUE_ID=$(echo "$issue"    | jq -r '.id            // "?"'   2>/dev/null)
