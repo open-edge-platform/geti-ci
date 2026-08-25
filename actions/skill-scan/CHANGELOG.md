@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.2](https://github.com/open-edge-platform/geti-ci/compare/skill-scan/v0.1.1...skill-scan/v0.1.2) (2026-08-25)
+
+
+### 🐛 Bug Fixes
+
+* skill-set action false failure when LOW level ([#111](https://github.com/open-edge-platform/geti-ci/issues/111)) ([ec607ef](https://github.com/open-edge-platform/geti-ci/commit/ec607ef51e1596c7202e275bcc7a290bfd7ab886))
+
+
+### 🔧 Chores
+
+* **deps:** update github actions ([#95](https://github.com/open-edge-platform/geti-ci/issues/95)) ([af5b359](https://github.com/open-edge-platform/geti-ci/commit/af5b359e1be0087294225ec16f76385506298517))
+
 ## [0.1.1](https://github.com/open-edge-platform/geti-ci/compare/skill-scan/v0.1.0...skill-scan/v0.1.1) (2026-07-10)
 
 
