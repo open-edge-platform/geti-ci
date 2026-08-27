@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/open-edge-platform/geti-ci/compare/skill-scan/v0.1.2...skill-scan/v0.2.0) (2026-08-27)
+
+
+### ✨ Features
+
+* **actions:** Updated skill-scan action ([#112](https://github.com/open-edge-platform/geti-ci/issues/112)) ([8e69d70](https://github.com/open-edge-platform/geti-ci/commit/8e69d705d091ae948f7b7e142e02ee18647a1305))
+
 ## [0.1.2](https://github.com/open-edge-platform/geti-ci/compare/skill-scan/v0.1.1...skill-scan/v0.1.2) (2026-08-25)
 
 
