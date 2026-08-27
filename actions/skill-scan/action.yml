@@ -161,7 +161,7 @@ runs:
               echo "Scanning: $skill" >&2
               # Find any *baseline.yaml in the skill directory and pass it to suppress known findings
               BASELINE_ARGS=()
-              BASELINE_FILE=$(find "$skill" -maxdepth 1 -name '*baseline.yaml' -type f | head -1)
+              BASELINE_FILE=$(find "$skill" -name '*baseline.yaml' -type f | head -1)
               if [[ -n "$BASELINE_FILE" ]]; then
                 echo "Using baseline: $BASELINE_FILE" >&2
                 BASELINE_ARGS=(--baseline "$BASELINE_FILE")
