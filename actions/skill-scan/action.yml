@@ -27,7 +27,7 @@ inputs:
   version:
     description: "SkillSpector pinned commit SHA to install"
     required: false
-    default: "ab0431ff2a9e9d75ba866f986be17f8600cfd086"
+    default: "v2.9.6"
 
 outputs:
   exit_code:
@@ -159,8 +159,15 @@ runs:
                 continue
               fi
               echo "Scanning: $skill" >&2
+              # Find any *baseline.yaml in the skill directory and pass it to suppress known findings
+              BASELINE_ARGS=()
+              BASELINE_FILE=$(find "$skill" -maxdepth 1 -name '*baseline.yaml' -type f | head -1)
+              if [[ -n "$BASELINE_FILE" ]]; then
+                echo "Using baseline: $BASELINE_FILE" >&2
+                BASELINE_ARGS=(--baseline "$BASELINE_FILE")
+              fi
               # Always capture output; ignore skillspector's own exit code
-              RESULT=$(skillspector scan "$skill" --no-llm --format json 2>/dev/stderr) || true
+              RESULT=$(skillspector scan "$skill" --no-llm --format json "${BASELINE_ARGS[@]}" 2>/dev/stderr) || true
               # Validate we got parseable JSON
               if ! echo "$RESULT" | jq -e . > /dev/null 2>&1; then
                 echo "---"
