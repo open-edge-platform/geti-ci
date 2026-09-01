@@ -10,7 +10,7 @@ repos:
 
   # zizmor detects security issues in GitHub Actions workflows.
   - repo: https://github.com/zizmorcore/zizmor-pre-commit
-    rev: v1.19.0
+    rev: v1.30.0
     hooks:
       - id: zizmor
         args: ["--min-severity", "low", "--min-confidence", "low"]
