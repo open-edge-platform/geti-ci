@@ -82,9 +82,7 @@ runs:
         ZIZMOR_VERSION: ${{ inputs.zizmor-version }}
         INPUTS_ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
 
-      # For changed scope: if changes in yaml/yml files are detected, we rescan all files because
-      # providing individual non-workflow files (even yaml) to Zizmor causes errors ("invalid GitHub Actions workflow").
-      # Based on the assumption that workflows are maintained in a valid state, this will not trigger alerts unrelated to the PR.
+      # For changed scope, run on files detected by changed-files.
 
       run: |
         set +e
@@ -117,13 +115,13 @@ runs:
 
           # First run is to produce output in SARIF format
 
-            echo "Running: uvx zizmor==\"$ZIZMOR_VERSION\" --min-confidence \"${CONFIDENCE}\" --min-severity \"${SEVERITY}\" --quiet --format sarif ."
+            echo "Running: uvx zizmor==\"$ZIZMOR_VERSION\" --min-confidence \"${CONFIDENCE}\" --min-severity \"${SEVERITY}\" --quiet --format sarif ${INPUTS_ALL_CHANGED_FILES}"
             uvx zizmor=="$ZIZMOR_VERSION" \
               --min-confidence "${CONFIDENCE}" \
               --min-severity "${SEVERITY}" \
               --quiet \
               --format sarif \
-              . \
+              ${INPUTS_ALL_CHANGED_FILES} \
               > "$SARIF_FILE"
 
           # Second run is to produce plain report and output into workflow log
@@ -133,12 +131,12 @@ runs:
           # As a result, zizmor will always exit with code 0 even if findings are present, that is why we need this run to break CI, if required
           # https://docs.zizmor.sh/integrations/#manual-integration
 
-            echo "Running: uvx zizmor==\"$ZIZMOR_VERSION\" --min-confidence \"${CONFIDENCE}\" --min-severity \"${SEVERITY}\" --format plain ."
+            echo "Running: uvx zizmor==\"$ZIZMOR_VERSION\" --min-confidence \"${CONFIDENCE}\" --min-severity \"${SEVERITY}\" --format plain ${INPUTS_ALL_CHANGED_FILES}"
             uvx zizmor=="$ZIZMOR_VERSION" \
               --min-confidence "${CONFIDENCE}" \
               --min-severity "${SEVERITY}" \
                --format plain \
-              .
+              ${INPUTS_ALL_CHANGED_FILES}
           exit_code="$?"
           echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
 
