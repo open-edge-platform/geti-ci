@@ -46,7 +46,7 @@ jobs:
 
       - name: Run cleanup - dry run against non-existent packages
         id: cleanup
-        uses: ./actions/cleanup-images
+        uses: $/actions/cleanup-images
         with:
           packages: |
             geti-ci-nonexistent-package-a
@@ -94,7 +94,7 @@ jobs:
       - name: Run cleanup with invalid min-versions-to-keep
         id: cleanup-invalid
         continue-on-error: true
-        uses: ./actions/cleanup-images
+        uses: $/actions/cleanup-images
         with:
           packages: geti-ci-nonexistent-package
           min-versions-to-keep: not-a-number
@@ -131,7 +131,7 @@ jobs:
 
       - name: Run cleanup - dry run against real package
         id: cleanup
-        uses: ./actions/cleanup-images
+        uses: $/actions/cleanup-images
         with:
           packages: geti-cpu
           # 0 disables the keep-window so only the manifest-protection guard can

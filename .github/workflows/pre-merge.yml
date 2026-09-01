@@ -29,4 +29,4 @@ jobs:
         with:
           persist-credentials: false
       - name: Run pre-commit check
-        uses: ./actions/pre-commit
+        uses: $/actions/pre-commit
