@@ -38,7 +38,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Run Zizmor scan
-        uses: ./actions/zizmor
+        uses: $/actions/zizmor
         with:
           scan-scope: ${{ github.event_name == 'pull_request' && 'changed' || 'all' }}
           severity-level: ${{ github.event_name == 'pull_request' && 'LOW' || 'LOW' }}

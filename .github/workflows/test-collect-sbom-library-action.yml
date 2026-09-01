@@ -80,7 +80,7 @@ jobs:
         run: uv lock
 
       - name: Run collect-sbom-library action
-        uses: ./actions/collect-sbom-library
+        uses: $/actions/collect-sbom-library
         with:
           path: test-project
           extras: "dev"
@@ -115,7 +115,7 @@ jobs:
       - *generate-lockfile
 
       - name: Run collect-sbom-library with extras
-        uses: ./actions/collect-sbom-library
+        uses: $/actions/collect-sbom-library
         with:
           path: test-project
           extras: "dev,test"
@@ -148,7 +148,7 @@ jobs:
       - name: Run collect-sbom-library with malicious input (should fail)
         id: injection-test
         continue-on-error: true
-        uses: ./actions/collect-sbom-library
+        uses: $/actions/collect-sbom-library
         with:
           path: test-project-injection
           extras: "dev --index-url https://malicious.example.com"
@@ -181,7 +181,7 @@ jobs:
       - name: Run collect-sbom-library with dash-prefixed extra (should fail)
         id: dash-test
         continue-on-error: true
-        uses: ./actions/collect-sbom-library
+        uses: $/actions/collect-sbom-library
         with:
           path: test-project-dash
           extras: "--extra,dev"
@@ -214,7 +214,7 @@ jobs:
       - name: Run collect-sbom-library with special characters (should fail)
         id: special-test
         continue-on-error: true
-        uses: ./actions/collect-sbom-library
+        uses: $/actions/collect-sbom-library
         with:
           path: test-project-special
           extras: "dev;rm -rf /"

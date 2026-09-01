@@ -64,7 +64,7 @@ jobs:
 
       - name: Run Skill Validator — basic
         id: skill-validator-basic
-        uses: ./actions/skill-validator
+        uses: $/actions/skill-validator
         with:
           skills-path: test-skills
           scan-scope: all
@@ -115,7 +115,7 @@ jobs:
 
       - name: Run Skill Validator — no skills
         id: skill-validator-no-skills
-        uses: ./actions/skill-validator
+        uses: $/actions/skill-validator
         with:
           skills-path: test-skills-empty
           scan-scope: all
@@ -155,7 +155,7 @@ jobs:
 
       - name: Run Skill Validator — path traversal (expect failure)
         id: skill-validator-path-traversal
-        uses: ./actions/skill-validator
+        uses: $/actions/skill-validator
         continue-on-error: true
         with:
           skills-path: "../../"
@@ -193,7 +193,7 @@ jobs:
 
       - name: Run Skill Validator — invalid strict value (expect failure)
         id: skill-validator-invalid-input
-        uses: ./actions/skill-validator
+        uses: $/actions/skill-validator
         continue-on-error: true
         with:
           skills-path: test-skills
@@ -241,7 +241,7 @@ jobs:
 
       - name: Run Skill Validator — detection (expect has_errors=true)
         id: skill-validator-detection
-        uses: ./actions/skill-validator
+        uses: $/actions/skill-validator
         with:
           skills-path: test-skills
           scan-scope: all
@@ -300,7 +300,7 @@ jobs:
 
       - name: Run Skill Validator — warnings only, strict=false (must not fail)
         id: skill-validator-warnings
-        uses: ./actions/skill-validator
+        uses: $/actions/skill-validator
         with:
           skills-path: test-skills
           scan-scope: all
@@ -368,7 +368,7 @@ jobs:
 
       - name: Run Skill Validator — nested layout (skills-path at root)
         id: skill-validator-nested
-        uses: ./actions/skill-validator
+        uses: $/actions/skill-validator
         with:
           skills-path: test-skills-nested
           scan-scope: all
@@ -438,7 +438,7 @@ jobs:
 
       - name: Run Skill Validator — allow-dirs (expect has_errors=false and no unknown-dir warnings)
         id: skill-validator-allow-dirs
-        uses: ./actions/skill-validator
+        uses: $/actions/skill-validator
         with:
           skills-path: test-skills
           scan-scope: all
@@ -502,7 +502,7 @@ jobs:
 
       - name: Run Skill Validator — allow-flat-layouts=true (expect no root-file warnings)
         id: skill-validator-allow-flat-layouts
-        uses: ./actions/skill-validator
+        uses: $/actions/skill-validator
         with:
           skills-path: test-skills
           scan-scope: all

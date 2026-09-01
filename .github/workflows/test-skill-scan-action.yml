@@ -61,7 +61,7 @@ jobs:
 
       - name: Run Skill Scan — basic
         id: skill-scan-basic
-        uses: ./actions/skill-scan
+        uses: $/actions/skill-scan
         with:
           skills-path: test-skills
           scan-scope: all
@@ -110,7 +110,7 @@ jobs:
 
       - name: Run Skill Scan — no skills
         id: skill-scan-no-skills
-        uses: ./actions/skill-scan
+        uses: $/actions/skill-scan
         with:
           skills-path: test-skills-empty
           scan-scope: all
@@ -156,7 +156,7 @@ jobs:
 
       - name: Run Skill Scan — invalid severity (expect failure)
         id: skill-scan-invalid-severity
-        uses: ./actions/skill-scan
+        uses: $/actions/skill-scan
         continue-on-error: true
         with:
           skills-path: test-skills
@@ -190,7 +190,7 @@ jobs:
 
       - name: Run Skill Scan — path traversal (expect failure)
         id: skill-scan-path-traversal
-        uses: ./actions/skill-scan
+        uses: $/actions/skill-scan
         continue-on-error: true
         with:
           skills-path: "../../"
@@ -240,7 +240,7 @@ jobs:
 
       - name: Run Skill Scan — detection (expect exit_code=1)
         id: skill-scan-detection
-        uses: ./actions/skill-scan
+        uses: $/actions/skill-scan
         with:
           skills-path: test-skills
           scan-scope: all
@@ -301,7 +301,7 @@ jobs:
 
       - name: Run Skill Scan — nested layout (skills-path at root)
         id: skill-scan-nested
-        uses: ./actions/skill-scan
+        uses: $/actions/skill-scan
         with:
           skills-path: test-skills-nested
           scan-scope: all
