@@ -65,6 +65,7 @@ runs:
       id: changed-files
       uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47.0.6
       with:
+        separator: "\n"
         files: |
           **/*.yaml
           **/*.yml
@@ -112,16 +113,17 @@ runs:
         if [[ "$INPUTS_SCAN_SCOPE" == "changed" && -n "$INPUTS_ALL_CHANGED_FILES" ]]; then
           echo "There are some changes detected in yaml/yml, checking with Zizmor"
           echo "Changed files: ${INPUTS_ALL_CHANGED_FILES}"
+          mapfile -t changed_files <<< "$INPUTS_ALL_CHANGED_FILES"
 
           # First run is to produce output in SARIF format
 
-            echo "Running: uvx zizmor==\"$ZIZMOR_VERSION\" --min-confidence \"${CONFIDENCE}\" --min-severity \"${SEVERITY}\" --quiet --format sarif ${INPUTS_ALL_CHANGED_FILES}"
+            echo "Running: uvx zizmor==\"$ZIZMOR_VERSION\" --min-confidence \"${CONFIDENCE}\" --min-severity \"${SEVERITY}\" --quiet --format sarif <changed-files>"
             uvx zizmor=="$ZIZMOR_VERSION" \
               --min-confidence "${CONFIDENCE}" \
               --min-severity "${SEVERITY}" \
               --quiet \
               --format sarif \
-              ${INPUTS_ALL_CHANGED_FILES} \
+              "${changed_files[@]}" \
               > "$SARIF_FILE"
 
           # Second run is to produce plain report and output into workflow log
@@ -131,12 +133,12 @@ runs:
           # As a result, zizmor will always exit with code 0 even if findings are present, that is why we need this run to break CI, if required
           # https://docs.zizmor.sh/integrations/#manual-integration
 
-            echo "Running: uvx zizmor==\"$ZIZMOR_VERSION\" --min-confidence \"${CONFIDENCE}\" --min-severity \"${SEVERITY}\" --format plain ${INPUTS_ALL_CHANGED_FILES}"
+            echo "Running: uvx zizmor==\"$ZIZMOR_VERSION\" --min-confidence \"${CONFIDENCE}\" --min-severity \"${SEVERITY}\" --format plain <changed-files>"
             uvx zizmor=="$ZIZMOR_VERSION" \
               --min-confidence "${CONFIDENCE}" \
               --min-severity "${SEVERITY}" \
                --format plain \
-              ${INPUTS_ALL_CHANGED_FILES}
+              "${changed_files[@]}"
           exit_code="$?"
           echo "exit_code=$exit_code" >> $GITHUB_OUTPUT
 
