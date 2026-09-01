@@ -43,7 +43,7 @@ jobs:
 
       - name: Run Zizmor - all scope with defaults
         id: zizmor-all
-        uses: ./actions/zizmor
+        uses: $/actions/zizmor
         with:
           upload-sarif: false
           scan-scope: all

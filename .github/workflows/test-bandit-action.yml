@@ -43,7 +43,7 @@ jobs:
 
       - name: Run Bandit - all scope with defaults
         id: bandit-all
-        uses: ./actions/bandit
+        uses: $/actions/bandit
         with:
           upload-sarif: false
           scan-scope: all
@@ -92,7 +92,7 @@ jobs:
 
       - name: Run Bandit on vulnerable file
         id: bandit-detection
-        uses: ./actions/bandit
+        uses: $/actions/bandit
         with:
           upload-sarif: false
           scan-scope: all
