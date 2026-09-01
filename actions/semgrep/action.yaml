@@ -222,7 +222,7 @@ runs:
     - name: Upload reports in SARIF
       # Upload report if SARIF file is available and repo is public
       if: github.event.repository.private == false && hashFiles('security-results/semgrep/semgrep-results.sarif') != ''
-      uses: github/codeql-action/upload-sarif@d1ba80a13dd99fba24a470575428917156a28b43 # v4.37.5
+      uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
       with:
         sarif_file: security-results/semgrep/semgrep-results.sarif
 
