@@ -225,7 +225,7 @@ runs:
       # If SARIF is available, upload it considering that for private repos Advanced Security subscription is n/a
       # but will be visible in workflow log
       if: inputs.upload-sarif == 'true' && github.event.repository.private == false && hashFiles('bandit-report.sarif') != ''
-      uses: github/codeql-action/upload-sarif@d1ba80a13dd99fba24a470575428917156a28b43 # v4.37.5
+      uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
       with:
         sarif_file: bandit-report.sarif
         category: bandit
