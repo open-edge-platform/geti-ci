@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/open-edge-platform/geti-ci/compare/skill-validator/v0.2.2...skill-validator/v0.2.3) (2026-09-01)
+
+
+### 🔧 Chores
+
+* **deps:** update tools ([#117](https://github.com/open-edge-platform/geti-ci/issues/117)) ([1b357bc](https://github.com/open-edge-platform/geti-ci/commit/1b357bcec41e6bbb393562fc3de86f45d3ab3042))
+
 ## [0.2.2](https://github.com/open-edge-platform/geti-ci/compare/skill-validator/v0.2.1...skill-validator/v0.2.2) (2026-08-11)
 
 
