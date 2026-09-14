@@ -228,7 +228,14 @@ runs:
         CMD="$CMD ${SCAN_TARGET}"
 
         echo "Executing command: $CMD"
-        eval $CMD || echo "::warning::Trivy scan completed with findings"
+        set +e
+        eval $CMD
+        EXIT_CODE=$?
+        set -e
+        echo "exit_code=${EXIT_CODE}" >> $GITHUB_OUTPUT
+        if [ $EXIT_CODE -ne 0 ]; then
+          echo "::warning::Trivy scan completed with findings"
+        fi
 
         if [ -f "${REPORT_FILE}" ]; then
           echo "report_path=${REPORT_FILE}" >> $GITHUB_OUTPUT
