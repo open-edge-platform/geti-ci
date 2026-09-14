@@ -1,0 +1,146 @@
+# Integration tests for Trivy composite action
+
+name: Test Trivy Action
+
+on:
+  pull_request:
+    paths:
+      - "actions/trivy/**"
+      - ".github/workflows/test-trivy-action.yml"
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+  push:
+    branches:
+      - main
+    paths:
+      - "actions/trivy/**"
+      - ".github/workflows/test-trivy-action.yml"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  # Test 1: Baseline - no harden-runner, confirms the action works unrestricted
+  trivy-test-no-harden-runner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run Trivy
+        id: trivy
+        uses: $/actions/trivy
+        with:
+          scan_type: "fs"
+          scan-scope: all
+          scan_target: "actions/trivy"
+          scanners: "vuln"
+          format: "json"
+          ignore_unfixed: "true"
+          artifact-name: test-trivy-no-harden-runner
+
+      - name: Verify scan executed
+        shell: bash
+        env:
+          SCAN_RESULT: ${{ steps.trivy.outputs.scan_result }}
+          REPORT_PATH: ${{ steps.trivy.outputs.report_path }}
+        run: |
+          if [[ -z "$SCAN_RESULT" ]]; then
+            echo "Error: scan_result output is empty"
+            exit 1
+          fi
+          if [[ ! -f "$REPORT_PATH" ]]; then
+            echo "Error: report file $REPORT_PATH was not created"
+            exit 1
+          fi
+          echo "Scan completed with exit code: $SCAN_RESULT"
+
+  # Test 2: Same scan under harden-runner egress-policy=block, to catch install/download
+  # endpoints that regress (this is what surfaced the flaky Trivy install failures).
+  trivy-test-with-harden-runner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Harden the runner (block all egress except allow-listed endpoints)
+        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        with:
+          egress-policy: block
+          allowed-endpoints: >
+            api.github.com:443
+            check.trivy.dev:443
+            get.trivy.dev:443
+            ghcr.io:443
+            github.com:443
+            mirror.gcr.io:443
+            objects.githubusercontent.com:443
+            raw.githubusercontent.com:443
+            release-assets.githubusercontent.com:443
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run Trivy
+        id: trivy
+        uses: $/actions/trivy
+        with:
+          scan_type: "fs"
+          scan-scope: all
+          scan_target: "actions/trivy"
+          scanners: "vuln"
+          format: "json"
+          ignore_unfixed: "true"
+          artifact-name: test-trivy-with-harden-runner
+
+      - name: Verify scan executed
+        shell: bash
+        env:
+          SCAN_RESULT: ${{ steps.trivy.outputs.scan_result }}
+          REPORT_PATH: ${{ steps.trivy.outputs.report_path }}
+        run: |
+          if [[ -z "$SCAN_RESULT" ]]; then
+            echo "Error: scan_result output is empty"
+            exit 1
+          fi
+          if [[ ! -f "$REPORT_PATH" ]]; then
+            echo "Error: report file $REPORT_PATH was not created"
+            exit 1
+          fi
+          echo "Scan completed with exit code: $SCAN_RESULT"
+
+  # Summary job - provides single point of success/failure
+  trivy-test-summary:
+    runs-on: ubuntu-latest
+    needs:
+      - trivy-test-no-harden-runner
+      - trivy-test-with-harden-runner
+    if: always()
+    steps:
+      - name: Check test results
+        shell: bash
+        env:
+          TEST_NO_HARDEN_RUNNER_RESULT: ${{ needs.trivy-test-no-harden-runner.result }}
+          TEST_WITH_HARDEN_RUNNER_RESULT: ${{ needs.trivy-test-with-harden-runner.result }}
+        run: |
+          if [[ "$TEST_NO_HARDEN_RUNNER_RESULT" != "success" ]]; then
+            echo "❌ Test without harden-runner failed"
+            exit 1
+          fi
+
+          if [[ "$TEST_WITH_HARDEN_RUNNER_RESULT" != "success" ]]; then
+            echo "❌ Test with harden-runner (block) failed"
+            exit 1
+          fi
+
+          echo "✅ All Trivy action tests passed successfully!"
