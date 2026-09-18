@@ -100,8 +100,8 @@ inputs:
   trivy-version:
     description: "Trivy version"
     required: false
-    # renovate: datasource=github-tags depName=aquasecurity/trivy
-    default: v0.69.3
+    # renovate: datasource=docker depName=aquasec/trivy
+    default: 0.69.3
   config_path:
     description: "Path to Trivy configuration file"
     required: false
@@ -134,7 +134,8 @@ runs:
     - name: Install Trivy
       shell: bash
       env:
-        TRIVY_VERSION: ${{ inputs.trivy-version }}
+        # GitHub release tags are v-prefixed; the input isn't (it matches the Docker Hub tag Renovate tracks).
+        TRIVY_VERSION: v${{ inputs.trivy-version }}
       run: |
         # install.sh downloads from CDN/GitHub release redirects which occasionally fail transiently;
         # retry with debug logging so failures are diagnosable instead of a bare exit code.
