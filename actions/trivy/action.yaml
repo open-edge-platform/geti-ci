@@ -101,7 +101,7 @@ inputs:
     description: "Trivy version"
     required: false
     # renovate: datasource=docker depName=aquasec/trivy
-    default: 0.69.3
+    default: 0.74.0
   config_path:
     description: "Path to Trivy configuration file"
     required: false
