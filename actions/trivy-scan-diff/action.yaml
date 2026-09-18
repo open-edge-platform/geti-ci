@@ -5,10 +5,13 @@
 #   - Non-base image CVEs: introduced by the application layers on top of the base
 #   - Base image CVEs: inherited from the base image itself
 #
+# It also reports the base image's publication timestamp (best-effort) so the
+# caller can judge for themselves whether the pinned base image is current.
+#
 # This is a scan-and-report action: it never fails the workflow based on CVE
-# findings, CVE severity, or an outdated base image. The only hard failure is
-# an unpinned `base-image` input (missing `@sha256:...` digest), since the
-# diff and "is latest" comparison require a reproducible reference.
+# findings or CVE severity. The only hard failure is an unpinned `base-image`
+# input (missing `@sha256:...` digest), since the diff requires a reproducible
+# reference.
 
 name: "Trivy Scan Diff"
 description: "Scans an image against a pinned base image and reports non-base vs base-image CVEs"
@@ -28,10 +31,6 @@ inputs:
     description: "Ignore unpatched/unfixed vulnerabilities"
     required: false
     default: "false"
-  check-base-latest:
-    description: "Best-effort check whether base-image's pinned digest matches the registry's latest tag/version"
-    required: false
-    default: "true"
   timeout:
     description: "Trivy timeout duration per scan (e.g. 5m, 10m)"
     required: false
@@ -68,9 +67,9 @@ outputs:
   base_cve_count:
     description: "Count of CVEs inherited from the base image"
     value: ${{ steps.diff.outputs.base_cve_count }}
-  base_image_is_latest:
-    description: "Whether base-image's pinned digest matches the registry's latest tag/version (true/false/unknown)"
-    value: ${{ steps.latest-check.outputs.base_image_is_latest }}
+  base_image_created:
+    description: "Best-effort publication timestamp (RFC3339) of base-image, read from its image config. Empty if it could not be determined. Use this to judge whether the pinned base image is current."
+    value: ${{ steps.base-image-info.outputs.base_image_created }}
 
 runs:
   using: composite
@@ -81,7 +80,7 @@ runs:
         INPUTS_BASE_IMAGE: ${{ inputs.base-image }}
       run: |
         if [[ ! "$INPUTS_BASE_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]]; then
-          echo "::error::base-image '$INPUTS_BASE_IMAGE' is not pinned by digest. It must be in the form 'registry/repo@sha256:<64-hex-digest>' so the diff and latest-check are reproducible."
+          echo "::error::base-image '$INPUTS_BASE_IMAGE' is not pinned by digest. It must be in the form 'registry/repo@sha256:<64-hex-digest>' so the diff is reproducible."
           exit 1
         fi
 
@@ -148,48 +147,21 @@ runs:
         trivy image --severity "$INPUTS_SEVERITY" --timeout "$INPUTS_TIMEOUT" $IGNORE_UNFIXED_FLAG \
           --format table --output "${RESULTS_DIR}/base-image-report.txt" "$INPUTS_BASE_IMAGE"
 
-    - name: Check whether base image is latest
-      id: latest-check
+    - name: Get base image metadata
+      id: base-image-info
       shell: bash
       env:
         INPUTS_BASE_IMAGE: ${{ inputs.base-image }}
-        INPUTS_CHECK_BASE_LATEST: ${{ inputs.check-base-latest }}
       run: |
-        REPO="${INPUTS_BASE_IMAGE%@*}"
-        DIGEST="${INPUTS_BASE_IMAGE#*@}"
-        IS_LATEST="unknown"
-
-        if [[ "$INPUTS_CHECK_BASE_LATEST" != "true" ]]; then
-          echo "check-base-latest is disabled; skipping."
-        else
-          set +e
-          LATEST_DIGEST=$(crane digest "${REPO}:latest" 2>/dev/null)
-          FOUND_LATEST_TAG=$?
-          set -e
-          if [[ $FOUND_LATEST_TAG -eq 0 && -n "$LATEST_DIGEST" ]]; then
-            [[ "$LATEST_DIGEST" == "$DIGEST" ]] && IS_LATEST="true" || IS_LATEST="false"
-          else
-            echo "::warning::No accessible ':latest' tag for ${REPO}; falling back to highest semver-looking tag."
-            set +e
-            HIGHEST_TAG=$(crane ls "$REPO" 2>/dev/null | grep -E '^v?[0-9]+(\.[0-9]+){1,2}$' | sort -V | tail -n1)
-            set -e
-            if [[ -n "$HIGHEST_TAG" ]]; then
-              set +e
-              HIGHEST_DIGEST=$(crane digest "${REPO}:${HIGHEST_TAG}" 2>/dev/null)
-              FOUND_HIGHEST=$?
-              set -e
-              if [[ $FOUND_HIGHEST -eq 0 && -n "$HIGHEST_DIGEST" ]]; then
-                [[ "$HIGHEST_DIGEST" == "$DIGEST" ]] && IS_LATEST="true" || IS_LATEST="false"
-              else
-                echo "::warning::Could not resolve digest for tag '${HIGHEST_TAG}' of ${REPO}; base-image-is-latest check is inconclusive."
-              fi
-            else
-              echo "::warning::Could not determine a 'latest' reference for ${REPO} (no ':latest' tag, no semver-looking tags); base-image-is-latest check is inconclusive."
-            fi
-          fi
+        # Best-effort only: the caller decides for themselves whether this makes the base image current.
+        CREATED=""
+        set +e
+        CREATED=$(crane config "$INPUTS_BASE_IMAGE" 2>/dev/null | jq -r '.created // empty')
+        set -e
+        if [[ -z "$CREATED" ]]; then
+          echo "::warning::Could not determine a publication timestamp for base-image '${INPUTS_BASE_IMAGE}'."
         fi
-
-        echo "base_image_is_latest=${IS_LATEST}" >> "$GITHUB_OUTPUT"
+        echo "base_image_created=${CREATED}" >> "$GITHUB_OUTPUT"
 
     - name: Diff CVEs and generate report
       id: diff
@@ -197,7 +169,7 @@ runs:
       env:
         INPUTS_IMAGE: ${{ inputs.image }}
         INPUTS_BASE_IMAGE: ${{ inputs.base-image }}
-        IS_LATEST: ${{ steps.latest-check.outputs.base_image_is_latest }}
+        BASE_IMAGE_CREATED: ${{ steps.base-image-info.outputs.base_image_created }}
       run: |
         RESULTS_DIR="trivy-scan-diff-results"
 
@@ -241,7 +213,7 @@ runs:
           echo ""
           echo "**Target image:** \`$INPUTS_IMAGE\`"
           echo "**Base image:** \`$INPUTS_BASE_IMAGE\`"
-          echo "**Base image is latest:** $IS_LATEST"
+          echo "**Base image published:** ${BASE_IMAGE_CREATED:-unknown}"
           echo ""
           echo "## Non-base image CVEs (introduced by application layers)"
           echo ""
@@ -259,14 +231,14 @@ runs:
         jq -n \
           --arg image "$INPUTS_IMAGE" \
           --arg base_image "$INPUTS_BASE_IMAGE" \
-          --arg base_is_latest "$IS_LATEST" \
+          --arg base_image_created "$BASE_IMAGE_CREATED" \
           --argjson non_base_count "$NON_BASE_COUNT" \
           --argjson base_count "$BASE_COUNT" \
           --slurpfile diff /tmp/diff.json \
           '{
             image: $image,
             base_image: $base_image,
-            base_image_is_latest: $base_is_latest,
+            base_image_created: $base_image_created,
             non_base_cve_count: $non_base_count,
             base_cve_count: $base_count,
             non_base_cves: $diff[0].non_base,

@@ -5,9 +5,9 @@ Scans a target container image and a digest-pinned base image with [Trivy](https
 - **Non-base image CVEs** — introduced by the application layers on top of the base image
 - **Base image CVEs** — inherited from the base image itself
 
-It also performs a best-effort check of whether the pinned `base-image` digest matches the registry's `latest` tag (or highest semver-looking tag, if no `latest` tag exists).
+It also reports the base image's publication timestamp (best-effort, read from its image config) so you can judge for yourself whether the pinned base image is current.
 
-This is a **scan-and-report** action: it never fails the workflow based on CVE findings, CVE severity, or an outdated base image. The only failure case is an unpinned `base-image` input — it must always be pinned by digest (`registry/repo@sha256:...`) so the diff and latest-check are reproducible.
+This is a **scan-and-report** action: it never fails the workflow based on CVE findings or CVE severity. The only failure case is an unpinned `base-image` input — it must always be pinned by digest (`registry/repo@sha256:...`) so the diff is reproducible.
 
 ## Usage
 
@@ -75,7 +75,6 @@ Job outputs (`non_base_cve_count`, `base_cve_count`, etc.) are per matrix leg �
 | `base-image`         | String  | Base image reference, must be pinned by digest (`registry/repo@sha256:...`)                      | —                                     | Yes      |
 | `severity`           | String  | Severity levels to check, comma-separated (UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL)                     | `UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL` | No       |
 | `ignore_unfixed`     | boolean | Ignore unpatched/unfixed vulnerabilities                                                         | `false`                               | No       |
-| `check-base-latest`  | boolean | Best-effort check whether `base-image`'s digest matches the registry's latest tag/version        | `true`                                | No       |
 | `timeout`            | String  | Trivy timeout duration per scan (e.g. 5m, 10m)                                                   | `10m`                                 | No       |
 | `trivy-version`      | String  | Trivy version                                                                                     | Updated by Renovate                   | No       |
 | `artifact-name`      | String  | Upload artifact name. Must be unique per matrix leg when used inside a `strategy.matrix`          | `trivy-scan-diff-results`             | No       |
@@ -93,6 +92,6 @@ Job outputs (`non_base_cve_count`, `base_cve_count`, etc.) are per matrix leg �
 | `base_image_scan_report_path`    | String | Path to the full plain-text Trivy scan of `base-image`                         |
 | `non_base_cve_count`             | String | Count of CVEs introduced by app layers (not present in base)                    |
 | `base_cve_count`                  | String | Count of CVEs inherited from the base image                                    |
-| `base_image_is_latest`           | String | `true` / `false` / `unknown` (best-effort)                                      |
+| `base_image_created`             | String | Best-effort publication timestamp (RFC3339) of `base-image`, read from its image config. Empty if it could not be determined. |
 
 The uploaded artifact (under `artifact-name`) contains `image-report.json`, `image-report.txt`, `base-image-report.json`, `base-image-report.txt`, `diff-report.md`, and `diff-report.json`.
