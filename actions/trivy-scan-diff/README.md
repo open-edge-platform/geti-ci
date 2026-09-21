@@ -52,7 +52,7 @@ jobs:
         env:
           IMAGE: ${{ matrix.image }}
         run: |
-          SAFE_NAME=$(echo "$IMAGE" | tr -c 'a-zA-Z0-9._-' '-')
+          SAFE_NAME=$(printf '%s' "$IMAGE" | tr -c 'a-zA-Z0-9._-' '-')
           echo "artifact_name=trivy-scan-diff-${SAFE_NAME}" >> "$GITHUB_OUTPUT"
 
       - uses: open-edge-platform/geti-ci/actions/trivy-scan-diff@<SHA> # trivy-scan-diff/v0.1.0
