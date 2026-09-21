@@ -1,0 +1,279 @@
+# Trivy Scan Diff Action
+#
+# Scans a target container image and a digest-pinned base image with Trivy,
+# then diffs the vulnerability findings into two report sections:
+#   - Non-base image CVEs: introduced by the application layers on top of the base
+#   - Base image CVEs: inherited from the base image itself
+#
+# Both sections are written to diff-report.md/diff-report.json (uploaded as an
+# artifact), but the job summary ($GITHUB_STEP_SUMMARY) only includes the
+# Non-base image CVEs section, since base-image CVEs aren't actionable here.
+#
+# It also reports the base image's publication timestamp (best-effort, shown as
+# a plain YYYY-MM-DD date) so the caller can judge for themselves whether the
+# pinned base image is current.
+#
+# This is a scan-and-report action: it never fails the workflow based on CVE
+# findings or CVE severity. The only hard failure is an unpinned `base-image`
+# input (missing `@sha256:...` digest), since the diff requires a reproducible
+# reference.
+
+name: "Trivy Scan Diff"
+description: "Scans an image against a pinned base image and reports non-base vs base-image CVEs"
+
+inputs:
+  image:
+    description: "Target container image to scan"
+    required: true
+  base-image:
+    description: "Base image reference, must be pinned by digest (e.g. registry/repo@sha256:...)"
+    required: true
+  severity:
+    description: "Severity levels to check, comma-separated (UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL)"
+    required: false
+    default: "UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL"
+  ignore_unfixed:
+    description: "Ignore unpatched/unfixed vulnerabilities"
+    required: false
+    default: "false"
+  timeout:
+    description: "Trivy timeout duration per scan (e.g. 5m, 10m)"
+    required: false
+    default: "10m"
+  trivy-version:
+    description: "Trivy version"
+    required: false
+    # renovate: datasource=docker depName=aquasec/trivy
+    default: 0.74.0
+  artifact-name:
+    description: "Upload artifact name. Must be unique per matrix leg when this action is used inside a strategy.matrix"
+    required: false
+    default: "trivy-scan-diff-results"
+
+outputs:
+  scan_result:
+    description: "Execution status of the scan+diff pipeline (0 = success). Never reflects CVE findings."
+    value: ${{ steps.diff.outputs.scan_result }}
+  report_path:
+    description: "Path to the generated markdown diff report (2 sections)"
+    value: ${{ steps.diff.outputs.report_path }}
+  json_report_path:
+    description: "Path to the generated JSON diff report"
+    value: ${{ steps.diff.outputs.json_report_path }}
+  image_scan_report_path:
+    description: "Path to the full plain-text Trivy scan of `image`"
+    value: ${{ steps.diff.outputs.image_scan_report_path }}
+  base_image_scan_report_path:
+    description: "Path to the full plain-text Trivy scan of `base-image`"
+    value: ${{ steps.diff.outputs.base_image_scan_report_path }}
+  non_base_cve_count:
+    description: "Count of CVEs introduced by app layers (not present in base)"
+    value: ${{ steps.diff.outputs.non_base_cve_count }}
+  base_cve_count:
+    description: "Count of CVEs inherited from the base image"
+    value: ${{ steps.diff.outputs.base_cve_count }}
+  base_image_created:
+    description: "Best-effort publication timestamp (RFC3339) of base-image, read from its image config. Empty if it could not be determined. Use this to judge whether the pinned base image is current."
+    value: ${{ steps.base-image-info.outputs.base_image_created }}
+
+runs:
+  using: composite
+  steps:
+    - name: Validate base-image is pinned by digest
+      shell: bash
+      env:
+        INPUTS_BASE_IMAGE: ${{ inputs.base-image }}
+      run: |
+        if [[ ! "$INPUTS_BASE_IMAGE" =~ @sha256:[0-9a-f]{64}$ ]]; then
+          echo "::error::base-image '$INPUTS_BASE_IMAGE' is not pinned by digest. It must be in the form 'registry/repo@sha256:<64-hex-digest>' so the diff is reproducible."
+          exit 1
+        fi
+
+    - name: Install Trivy
+      shell: bash
+      env:
+        # GitHub release tags are v-prefixed; the input isn't (it matches the Docker Hub tag Renovate tracks).
+        TRIVY_VERSION: v${{ inputs.trivy-version }}
+      run: |
+        # install.sh downloads from CDN/GitHub release redirects which occasionally fail transiently;
+        # retry with debug logging so failures are diagnosable instead of a bare exit code.
+        for i in 1 2 3; do
+          echo "Attempt $i to install Trivy..."
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -d -b /usr/local/bin "$TRIVY_VERSION" && break
+          sleep 10
+        done
+        for i in 1 2 3; do
+          echo "Attempt $i to download vulnerability database..."
+          trivy image --download-db-only && break || sleep 10
+        done
+
+    - name: Install crane
+      shell: bash
+      env:
+        # renovate: datasource=github-releases depName=google/go-containerregistry
+        CRANE_VERSION: v0.22.1
+      run: |
+        for i in 1 2 3; do
+          echo "Attempt $i to install crane..."
+          curl -sfL "https://github.com/google/go-containerregistry/releases/download/${CRANE_VERSION}/go-containerregistry_Linux_x86_64.tar.gz" -o /tmp/crane.tar.gz && break
+          sleep 10
+        done
+        tar -xzf /tmp/crane.tar.gz -C /usr/local/bin crane
+        rm -f /tmp/crane.tar.gz
+        crane version
+
+    - name: Scan target and base images
+      id: scan
+      shell: bash
+      env:
+        INPUTS_IMAGE: ${{ inputs.image }}
+        INPUTS_BASE_IMAGE: ${{ inputs.base-image }}
+        INPUTS_SEVERITY: ${{ inputs.severity }}
+        INPUTS_IGNORE_UNFIXED: ${{ inputs.ignore_unfixed }}
+        INPUTS_TIMEOUT: ${{ inputs.timeout }}
+      run: |
+        mkdir -p trivy-scan-diff-results
+        RESULTS_DIR="trivy-scan-diff-results"
+
+        IGNORE_UNFIXED_FLAG=""
+        if [[ "$INPUTS_IGNORE_UNFIXED" == "true" ]]; then
+          IGNORE_UNFIXED_FLAG="--ignore-unfixed"
+        fi
+
+        echo "Scanning target image: $INPUTS_IMAGE"
+        trivy image --severity "$INPUTS_SEVERITY" --timeout "$INPUTS_TIMEOUT" $IGNORE_UNFIXED_FLAG \
+          --format json --output "${RESULTS_DIR}/image-report.json" "$INPUTS_IMAGE"
+        trivy image --severity "$INPUTS_SEVERITY" --timeout "$INPUTS_TIMEOUT" $IGNORE_UNFIXED_FLAG \
+          --format table --output "${RESULTS_DIR}/image-report.txt" "$INPUTS_IMAGE"
+
+        echo "Scanning base image: $INPUTS_BASE_IMAGE"
+        trivy image --severity "$INPUTS_SEVERITY" --timeout "$INPUTS_TIMEOUT" $IGNORE_UNFIXED_FLAG \
+          --format json --output "${RESULTS_DIR}/base-image-report.json" "$INPUTS_BASE_IMAGE"
+        trivy image --severity "$INPUTS_SEVERITY" --timeout "$INPUTS_TIMEOUT" $IGNORE_UNFIXED_FLAG \
+          --format table --output "${RESULTS_DIR}/base-image-report.txt" "$INPUTS_BASE_IMAGE"
+
+    - name: Get base image metadata
+      id: base-image-info
+      shell: bash
+      env:
+        INPUTS_BASE_IMAGE: ${{ inputs.base-image }}
+      run: |
+        # Best-effort only: the caller decides for themselves whether this makes the base image current.
+        CREATED=""
+        set +e
+        CREATED=$(crane config "$INPUTS_BASE_IMAGE" 2>/dev/null | jq -r '.created // empty')
+        set -e
+        if [[ -z "$CREATED" ]]; then
+          echo "::warning::Could not determine a publication timestamp for base-image '${INPUTS_BASE_IMAGE}'."
+        fi
+        echo "base_image_created=${CREATED}" >> "$GITHUB_OUTPUT"
+
+    - name: Diff CVEs and generate report
+      id: diff
+      shell: bash
+      env:
+        INPUTS_IMAGE: ${{ inputs.image }}
+        INPUTS_BASE_IMAGE: ${{ inputs.base-image }}
+        BASE_IMAGE_CREATED: ${{ steps.base-image-info.outputs.base_image_created }}
+      run: |
+        RESULTS_DIR="trivy-scan-diff-results"
+
+        # Flatten each report to {id, pkg, eco, severity, fixed} records. Ecosystem (Trivy
+        # Result.Type, e.g. debian/alpine/pip/npm) is part of the match key so the same
+        # VulnerabilityID+PkgName in unrelated ecosystems is never treated as the same finding.
+        jq -c '[.Results[]? | .Type as $eco | (.Vulnerabilities // [])[] |
+          {id: .VulnerabilityID, pkg: .PkgName, eco: $eco, severity: .Severity, fixed: (.FixedVersion // "N/A")}]' \
+          "${RESULTS_DIR}/image-report.json" > /tmp/image-vulns.json
+        jq -c '[.Results[]? | .Type as $eco | (.Vulnerabilities // [])[] |
+          {id: .VulnerabilityID, pkg: .PkgName, eco: $eco, severity: .Severity, fixed: (.FixedVersion // "N/A")}]' \
+          "${RESULTS_DIR}/base-image-report.json" > /tmp/base-vulns.json
+        jq -c '[.[] | (.id + "|" + .pkg + "|" + .eco)] | unique' /tmp/base-vulns.json > /tmp/base-keys.json
+
+        jq --slurpfile basekeys /tmp/base-keys.json '
+          ($basekeys[0]) as $bk
+          | {
+              non_base: [ .[] | select( (.id + "|" + .pkg + "|" + .eco) as $k | ($k | IN($bk[])) | not ) ],
+              base: [ .[] | select( (.id + "|" + .pkg + "|" + .eco) as $k | ($k | IN($bk[])) ) ]
+            }
+        ' /tmp/image-vulns.json > /tmp/diff.json
+
+        NON_BASE_COUNT=$(jq '.non_base | length' /tmp/diff.json)
+        BASE_COUNT=$(jq '.base | length' /tmp/diff.json)
+        BASE_IMAGE_PUBLISHED="${BASE_IMAGE_CREATED:0:10}"
+        BASE_IMAGE_PUBLISHED="${BASE_IMAGE_PUBLISHED:-unknown}"
+
+        render_table() {
+          local key="$1"
+          local count
+          count=$(jq --arg k "$key" '.[$k] | length' /tmp/diff.json)
+          if [[ "$count" -gt 0 ]]; then
+            echo "| CVE ID | Package | Ecosystem | Severity | Fixed Version |"
+            echo "|---|---|---|---|---|"
+            jq -r --arg k "$key" '.[$k][] | "| " + .id + " | " + .pkg + " | " + .eco + " | " + .severity + " | " + .fixed + " |"' /tmp/diff.json
+          else
+            echo "_No CVEs found in this section._"
+          fi
+        }
+
+        {
+          echo "# Trivy Scan Diff Report"
+          echo ""
+          echo "**Target image:** \`$INPUTS_IMAGE\`"
+          echo "**Base image:** \`$INPUTS_BASE_IMAGE\`"
+          echo "**Base image published:** ${BASE_IMAGE_PUBLISHED}"
+          echo ""
+          echo "## Non-base image CVEs (introduced by application layers)"
+          echo ""
+          render_table non_base
+          echo ""
+          echo "## Base image CVEs (inherited from base image)"
+          echo ""
+          render_table base
+        } > "${RESULTS_DIR}/diff-report.md"
+
+        jq -n \
+          --arg image "$INPUTS_IMAGE" \
+          --arg base_image "$INPUTS_BASE_IMAGE" \
+          --arg base_image_created "$BASE_IMAGE_CREATED" \
+          --argjson non_base_count "$NON_BASE_COUNT" \
+          --argjson base_count "$BASE_COUNT" \
+          --slurpfile diff /tmp/diff.json \
+          '{
+            image: $image,
+            base_image: $base_image,
+            base_image_created: $base_image_created,
+            non_base_cve_count: $non_base_count,
+            base_cve_count: $base_count,
+            non_base_cves: $diff[0].non_base,
+            base_cves: $diff[0].base
+          }' > "${RESULTS_DIR}/diff-report.json"
+
+        # Base image CVEs are inherited (not actionable here) so they're left out of the job
+        # summary; the full report, including base CVEs, is still in diff-report.md/.json.
+        {
+          echo "# Trivy Scan Diff Report"
+          echo ""
+          echo "**Target image:** \`$INPUTS_IMAGE\`"
+          echo "**Base image:** \`$INPUTS_BASE_IMAGE\`"
+          echo "**Base image published:** ${BASE_IMAGE_PUBLISHED}"
+          echo ""
+          echo "## Non-base image CVEs (introduced by application layers)"
+          echo ""
+          render_table non_base
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        echo "scan_result=0" >> "$GITHUB_OUTPUT"
+        echo "report_path=${RESULTS_DIR}/diff-report.md" >> "$GITHUB_OUTPUT"
+        echo "json_report_path=${RESULTS_DIR}/diff-report.json" >> "$GITHUB_OUTPUT"
+        echo "image_scan_report_path=${RESULTS_DIR}/image-report.txt" >> "$GITHUB_OUTPUT"
+        echo "base_image_scan_report_path=${RESULTS_DIR}/base-image-report.txt" >> "$GITHUB_OUTPUT"
+        echo "non_base_cve_count=${NON_BASE_COUNT}" >> "$GITHUB_OUTPUT"
+        echo "base_cve_count=${BASE_COUNT}" >> "$GITHUB_OUTPUT"
+
+    - name: Upload reports
+      if: hashFiles('trivy-scan-diff-results/*') != ''
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: trivy-scan-diff-results
+        retention-days: 7

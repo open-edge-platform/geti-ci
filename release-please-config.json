@@ -47,6 +47,10 @@
     "actions/check-paths": {
       "package-name": "check-paths",
       "initial-version": "0.1.0"
+    },
+    "actions/trivy-scan-diff": {
+      "package-name": "trivy-scan-diff",
+      "initial-version": "0.1.0"
     }
   },
   "release-type": "simple",
