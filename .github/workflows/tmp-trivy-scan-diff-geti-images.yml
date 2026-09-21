@@ -1,0 +1,61 @@
+# TEMPORARY workflow for manually testing Trivy Scan Diff against real Geti images.
+# Safe to delete once the testing is done.
+
+name: (Temporary) Trivy Scan Diff - Geti Images
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/tmp-trivy-scan-diff-geti-images.yml"
+
+permissions: {}
+
+jobs:
+  trivy-scan-diff:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - ghcr.io/open-edge-platform/geti-cpu:develop
+          - ghcr.io/open-edge-platform/geti-cuda:develop
+          - ghcr.io/open-edge-platform/geti-xpu:develop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Sanitize image name for artifact
+        id: sanitize
+        shell: bash
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          SAFE_NAME=$(echo "$IMAGE" | tr -c 'a-zA-Z0-9._-' '-')
+          echo "artifact_name=trivy-scan-diff-${SAFE_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Run Trivy Scan Diff
+        id: trivy-scan-diff
+        uses: $/actions/trivy-scan-diff
+        with:
+          image: ${{ matrix.image }}
+          base-image: python:3.14-slim@sha256:ef30e8ee3a7f227b0b5b39669b2e656f35b56b918c6631820357c2a55ff5a428
+          artifact-name: ${{ steps.sanitize.outputs.artifact_name }}
+
+      - name: Print summary
+        shell: bash
+        env:
+          IMAGE: ${{ matrix.image }}
+          NON_BASE_CVE_COUNT: ${{ steps.trivy-scan-diff.outputs.non_base_cve_count }}
+          BASE_CVE_COUNT: ${{ steps.trivy-scan-diff.outputs.base_cve_count }}
+          BASE_IMAGE_CREATED: ${{ steps.trivy-scan-diff.outputs.base_image_created }}
+        run: |
+          echo "### Trivy Scan Diff — $IMAGE" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Non-base CVEs: $NON_BASE_CVE_COUNT" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Base CVEs: $BASE_CVE_COUNT" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Base image published: ${BASE_IMAGE_CREATED:-unknown}" >> "$GITHUB_STEP_SUMMARY"
