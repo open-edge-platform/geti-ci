@@ -2,35 +2,29 @@
 
 Scans a target container image and a digest-pinned base image with [Trivy](https://github.com/aquasecurity/trivy), then diffs the vulnerability findings into two report sections:
 
-- **Non-base image CVEs** — introduced by the application layers on top of the base image
-- **Base image CVEs** — inherited from the base image itself
+- Non-base image CVEs - introduced by the application layers on top of the base image
+- Base image CVEs - inherited from the base image itself
 
 It also reports the base image's publication timestamp (best-effort, read from its image config) so you can judge for yourself whether the pinned base image is current.
 
-This is a **scan-and-report** action: it never fails the workflow based on CVE findings or CVE severity. The only failure case is an unpinned `base-image` input — it must always be pinned by digest (`registry/repo@sha256:...`) so the diff is reproducible.
+Both sections are written to `diff-report.md`/`diff-report.json` (uploaded as an artifact), but the job summary (`$GITHUB_STEP_SUMMARY`) only includes the non-base image CVEs section and the base image's publication date, since base-image CVEs aren't actionable here.
+
+This is a scan-and-report action: it never fails the workflow based on CVE findings or CVE severity.
 
 ## Usage
 
 ```yaml
 name: Trivy scan diff
 
-on:
-  pull_request:
-
-permissions:
-  contents: read
+...
 
 jobs:
   trivy-scan-diff:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
       - name: Run Trivy scan diff
         id: trivy-scan-diff
-        uses: ./actions/trivy-scan-diff
+        uses: open-edge-platform/geti-ci/actions/trivy-scan-diff@<SHA> # trivy-scan-diff/v0.1.0
         with:
           image: "myregistry.io/myapp:latest"
           base-image: "python@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd"
@@ -39,7 +33,7 @@ jobs:
 
 ## Usage in a matrix (scanning several images)
 
-`actions/upload-artifact` requires a unique artifact name per workflow run, so each matrix leg **must** set a unique `artifact-name`:
+`actions/upload-artifact` requires a unique artifact name per workflow run, so each matrix leg **must** set a unique `artifact-name`. When scanning several images against the same base image, sanitize the image reference into a safe artifact name:
 
 ```yaml
 jobs:
@@ -48,24 +42,40 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - image: registry/app-a:latest
-            base-image: python@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd
-          - image: registry/app-b:latest
-            base-image: node@sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567
+        image:
+          - registry/app-a:latest
+          - registry/app-b:latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
+      - name: Sanitize image name for artifact
+        id: sanitize
+        shell: bash
+        env:
+          IMAGE: ${{ matrix.image }}
+        run: |
+          SAFE_NAME=$(echo "$IMAGE" | tr -c 'a-zA-Z0-9._-' '-')
+          echo "artifact_name=trivy-scan-diff-${SAFE_NAME}" >> "$GITHUB_OUTPUT"
 
-      - uses: ./actions/trivy-scan-diff
+      - uses: open-edge-platform/geti-ci/actions/trivy-scan-diff@<SHA> # trivy-scan-diff/v0.1.0
         with:
           image: ${{ matrix.image }}
-          base-image: ${{ matrix.base-image }}
-          artifact-name: trivy-scan-diff-${{ strategy.job-index }}
+          base-image: python@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd
+          artifact-name: ${{ steps.sanitize.outputs.artifact_name }}
 ```
 
-Job outputs (`non_base_cve_count`, `base_cve_count`, etc.) are per matrix leg — GitHub Actions does not auto-aggregate matrix job outputs. If a combined total across all images is needed, aggregate via `needs.<job>.outputs.*` in a follow-up summary job.
+If each image needs a different base image, use `matrix.include` instead and reference `matrix.base-image`:
+
+```yaml
+strategy:
+  fail-fast: false
+  matrix:
+    include:
+      - image: registry/app-a:latest
+        base-image: python@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcd
+      - image: registry/app-b:latest
+        base-image: node@sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234567
+```
+
+Job outputs (`non_base_cve_count`, `base_cve_count`, etc.) are per matrix leg, so GitHub Actions does not auto-aggregate matrix job outputs. If a combined total across all images is needed, aggregate via `needs.<job>.outputs.*` in a follow-up summary job.
 
 ## Inputs
 
@@ -79,7 +89,7 @@ Job outputs (`non_base_cve_count`, `base_cve_count`, etc.) are per matrix leg �
 | `trivy-version`      | String  | Trivy version                                                                                     | Updated by Renovate                   | No       |
 | `artifact-name`      | String  | Upload artifact name. Must be unique per matrix leg when used inside a `strategy.matrix`          | `trivy-scan-diff-results`             | No       |
 
-`base-image` can reference any registry (Docker Hub, `ghcr.io`, `quay.io`, etc.), as long as it includes a `@sha256:...` digest. Scanning a private `image`/`base-image` requires the caller to authenticate beforehand (e.g. via `docker/login-action`) so Trivy and `crane` can read `~/.docker/config.json`.
+`base-image` can reference any registry (Docker Hub, `ghcr.io`, `quay.io`, etc.), as long as it includes a `@sha256:...` digest.
 
 ## Outputs
 
@@ -92,6 +102,6 @@ Job outputs (`non_base_cve_count`, `base_cve_count`, etc.) are per matrix leg �
 | `base_image_scan_report_path`    | String | Path to the full plain-text Trivy scan of `base-image`                         |
 | `non_base_cve_count`             | String | Count of CVEs introduced by app layers (not present in base)                    |
 | `base_cve_count`                  | String | Count of CVEs inherited from the base image                                    |
-| `base_image_created`             | String | Best-effort publication timestamp (RFC3339) of `base-image`, read from its image config. Empty if it could not be determined. |
+| `base_image_created`             | String | Best-effort publication timestamp (RFC3339) of `base-image`, read from its image config. Empty if it could not be determined. Shown as a `YYYY-MM-DD` date in the markdown report and job summary. |
 
 The uploaded artifact (under `artifact-name`) contains `image-report.json`, `image-report.txt`, `base-image-report.json`, `base-image-report.txt`, `diff-report.md`, and `diff-report.json`.

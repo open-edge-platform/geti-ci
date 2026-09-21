@@ -5,8 +5,13 @@
 #   - Non-base image CVEs: introduced by the application layers on top of the base
 #   - Base image CVEs: inherited from the base image itself
 #
-# It also reports the base image's publication timestamp (best-effort) so the
-# caller can judge for themselves whether the pinned base image is current.
+# Both sections are written to diff-report.md/diff-report.json (uploaded as an
+# artifact), but the job summary ($GITHUB_STEP_SUMMARY) only includes the
+# Non-base image CVEs section, since base-image CVEs aren't actionable here.
+#
+# It also reports the base image's publication timestamp (best-effort, shown as
+# a plain YYYY-MM-DD date) so the caller can judge for themselves whether the
+# pinned base image is current.
 #
 # This is a scan-and-report action: it never fails the workflow based on CVE
 # findings or CVE severity. The only hard failure is an unpinned `base-image`
