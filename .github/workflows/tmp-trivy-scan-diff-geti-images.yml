@@ -45,6 +45,7 @@ jobs:
           image: ${{ matrix.image }}
           base-image: python:3.14-slim@sha256:ef30e8ee3a7f227b0b5b39669b2e656f35b56b918c6631820357c2a55ff5a428
           artifact-name: ${{ steps.sanitize.outputs.artifact_name }}
+          ignore_unfixed: true
 
       - name: Print summary
         shell: bash
