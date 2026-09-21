@@ -51,12 +51,12 @@ jobs:
         shell: bash
         env:
           IMAGE: ${{ matrix.image }}
+          BASE_IMAGE: python:3.14-slim@sha256:ef30e8ee3a7f227b0b5b39669b2e656f35b56b918c6631820357c2a55ff5a428
           NON_BASE_CVE_COUNT: ${{ steps.trivy-scan-diff.outputs.non_base_cve_count }}
-          BASE_CVE_COUNT: ${{ steps.trivy-scan-diff.outputs.base_cve_count }}
           BASE_IMAGE_CREATED: ${{ steps.trivy-scan-diff.outputs.base_image_created }}
         run: |
+          PUBLISHED="${BASE_IMAGE_CREATED:0:10}"
           echo "### Trivy Scan Diff — $IMAGE" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "- Non-base CVEs: $NON_BASE_CVE_COUNT" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Base CVEs: $BASE_CVE_COUNT" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Base image published: ${BASE_IMAGE_CREATED:-unknown}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Base image: $BASE_IMAGE (published: ${PUBLISHED:-unknown})" >> "$GITHUB_STEP_SUMMARY"

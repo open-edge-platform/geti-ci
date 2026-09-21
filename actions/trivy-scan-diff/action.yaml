@@ -194,6 +194,8 @@ runs:
 
         NON_BASE_COUNT=$(jq '.non_base | length' /tmp/diff.json)
         BASE_COUNT=$(jq '.base | length' /tmp/diff.json)
+        BASE_IMAGE_PUBLISHED="${BASE_IMAGE_CREATED:0:10}"
+        BASE_IMAGE_PUBLISHED="${BASE_IMAGE_PUBLISHED:-unknown}"
 
         render_table() {
           local key="$1"
@@ -213,17 +215,13 @@ runs:
           echo ""
           echo "**Target image:** \`$INPUTS_IMAGE\`"
           echo "**Base image:** \`$INPUTS_BASE_IMAGE\`"
-          echo "**Base image published:** ${BASE_IMAGE_CREATED:-unknown}"
+          echo "**Base image published:** ${BASE_IMAGE_PUBLISHED}"
           echo ""
           echo "## Non-base image CVEs (introduced by application layers)"
-          echo ""
-          echo "Count: $NON_BASE_COUNT"
           echo ""
           render_table non_base
           echo ""
           echo "## Base image CVEs (inherited from base image)"
-          echo ""
-          echo "Count: $BASE_COUNT"
           echo ""
           render_table base
         } > "${RESULTS_DIR}/diff-report.md"
