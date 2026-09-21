@@ -243,7 +243,19 @@ runs:
             base_cves: $diff[0].base
           }' > "${RESULTS_DIR}/diff-report.json"
 
-        cat "${RESULTS_DIR}/diff-report.md" >> "$GITHUB_STEP_SUMMARY"
+        # Base image CVEs are inherited (not actionable here) so they're left out of the job
+        # summary; the full report, including base CVEs, is still in diff-report.md/.json.
+        {
+          echo "# Trivy Scan Diff Report"
+          echo ""
+          echo "**Target image:** \`$INPUTS_IMAGE\`"
+          echo "**Base image:** \`$INPUTS_BASE_IMAGE\`"
+          echo "**Base image published:** ${BASE_IMAGE_PUBLISHED}"
+          echo ""
+          echo "## Non-base image CVEs (introduced by application layers)"
+          echo ""
+          render_table non_base
+        } >> "$GITHUB_STEP_SUMMARY"
 
         echo "scan_result=0" >> "$GITHUB_OUTPUT"
         echo "report_path=${RESULTS_DIR}/diff-report.md" >> "$GITHUB_OUTPUT"
