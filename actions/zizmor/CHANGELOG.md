@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.6](https://github.com/open-edge-platform/geti-ci/compare/zizmor/v0.1.5...zizmor/v0.1.6) (2026-10-01)
+
+
+### 🔧 Chores
+
+* **deps:** update github actions ([#129](https://github.com/open-edge-platform/geti-ci/issues/129)) ([bed2cfb](https://github.com/open-edge-platform/geti-ci/commit/bed2cfbd044eac48919bfe5d27e1746fc44db0d0))
+* **deps:** update tools ([#122](https://github.com/open-edge-platform/geti-ci/issues/122)) ([a09de7d](https://github.com/open-edge-platform/geti-ci/commit/a09de7d480cd678f24935d9a1422fb918d806410))
+
 ## [0.1.5](https://github.com/open-edge-platform/geti-ci/compare/zizmor/v0.1.4...zizmor/v0.1.5) (2026-09-01)
 
 
