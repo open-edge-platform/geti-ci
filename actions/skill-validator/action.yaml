@@ -48,7 +48,7 @@ inputs:
     description: "skill-validator version to install (e.g. v1.5.6)"
     required: false
     # renovate: datasource=github-releases depName=agent-ecosystem/skill-validator
-    default: v1.6.1
+    default: v1.6.2
 
 outputs:
   exit_code:
