@@ -44,7 +44,7 @@ inputs:
     description: "Trivy version"
     required: false
     # renovate: datasource=docker depName=aquasec/trivy
-    default: 0.74.0
+    default: 0.76.1
   artifact-name:
     description: "Upload artifact name. Must be unique per matrix leg when this action is used inside a strategy.matrix"
     required: false
