@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/open-edge-platform/geti-ci/compare/skill-scan/v0.2.0...skill-scan/v0.2.1) (2026-11-02)
+
+
+### 🔧 Chores
+
+* **deps:** update github actions ([#132](https://github.com/open-edge-platform/geti-ci/issues/132)) ([c285ee7](https://github.com/open-edge-platform/geti-ci/commit/c285ee78223169c3a185043921602c929657e5db))
+
 ## [0.2.0](https://github.com/open-edge-platform/geti-ci/compare/skill-scan/v0.1.2...skill-scan/v0.2.0) (2026-08-27)
 
 
