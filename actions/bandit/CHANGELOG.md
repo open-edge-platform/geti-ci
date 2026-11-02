@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.4](https://github.com/open-edge-platform/geti-ci/compare/bandit/v0.1.3...bandit/v0.1.4) (2026-11-02)
+
+
+### 🔧 Chores
+
+* **deps:** update github actions ([#129](https://github.com/open-edge-platform/geti-ci/issues/129)) ([bed2cfb](https://github.com/open-edge-platform/geti-ci/commit/bed2cfbd044eac48919bfe5d27e1746fc44db0d0))
+* **deps:** update github actions ([#132](https://github.com/open-edge-platform/geti-ci/issues/132)) ([c285ee7](https://github.com/open-edge-platform/geti-ci/commit/c285ee78223169c3a185043921602c929657e5db))
+
 ## [0.1.3](https://github.com/open-edge-platform/geti-ci/compare/bandit/v0.1.2...bandit/v0.1.3) (2026-09-01)
 
 
