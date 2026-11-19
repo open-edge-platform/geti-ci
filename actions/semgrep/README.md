@@ -73,8 +73,21 @@ jobs:
 | `output-format`    | String  | Format for scan results (text/json/sarif)          | `sarif`                                                | No       |
 | `fail-on-findings` | boolean | Whether to fail the action if issues are found     | `true`                                                 | No       |
 | `timeout`          | String  | Maximum time to run semgrep in seconds             | `300`                                                  | No       |
-| `timeout`          | String  | Maximum time to run semgrep in seconds             | `300`                                                  | No       |
+| `exclude-rules`    | String  | Rule IDs to skip (comma/newline separated)         | `""`                                                   | No       |
+| `upload-sarif`     | boolean | Whether to upload SARIF results                    | `true`                                                 | No       |
+| `artifact-name`    | String  | Artifact name                                      | `semgrep-results`                                      | No       |
 | `semgrep-version`  | String  | Semgrep version                                    | Updated by Renovate                                    | No       |
+
+Example of excluding rules (to exclude paths, use a `.semgrepignore` file in the repository root):
+
+```yaml
+      - name: Run Semgrep scan
+        uses: open-edge-platform/geti-ci/actions/semgrep@552c4...
+        with:
+          exclude-rules: |
+            python.lang.security.audit.subprocess-shell-true.subprocess-shell-true
+            generic.secrets.security.detected-generic-secret.detected-generic-secret
+```
 
 ## Outputs
 

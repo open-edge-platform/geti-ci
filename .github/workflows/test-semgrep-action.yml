@@ -1,0 +1,230 @@
+# Integration tests for Semgrep composite action
+
+name: Test Semgrep Action
+
+on:
+  pull_request:
+    paths:
+      - "actions/semgrep/**"
+      - ".github/workflows/test-semgrep-action.yml"
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+  push:
+    branches:
+      - main
+    paths:
+      - "actions/semgrep/**"
+      - ".github/workflows/test-semgrep-action.yml"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  # Test 1: Validates basic functionality with default settings
+  semgrep-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - &harden-runner
+        name: Harden the runner (audit all outbound calls)
+        uses: step-security/harden-runner@46b06cea07f9e64621fdf066ba77ac6915163d43 # v2.22.3
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run Semgrep - all scope with defaults
+        id: semgrep-all
+        uses: $/actions/semgrep
+        with:
+          upload-sarif: false
+          scan-scope: all
+          fail-on-findings: false
+          artifact-name: test1
+
+      - name: Verify scan executed
+        shell: bash
+        env:
+          SCAN_RESULT: ${{ steps.semgrep-all.outputs.scan_result }}
+          REPORT_PATH: ${{ steps.semgrep-all.outputs.report_path }}
+        run: |
+          if [[ -z "$SCAN_RESULT" ]]; then
+            echo "Error: scan_result output is empty"
+            exit 1
+          fi
+          if ! jq -e '.runs' "$REPORT_PATH" > /dev/null; then
+            echo "Error: $REPORT_PATH is not a valid SARIF report"
+            exit 1
+          fi
+          echo "Scan completed with exit code: $SCAN_RESULT"
+
+  # Test 2: Validates that Semgrep can detect security issues
+  semgrep-detection-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - *harden-runner
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - &create-test-files
+        name: Create test rules and file with security issues
+        shell: bash
+        run: |
+          # Rules file is kept in repo root so rule IDs are not prefixed with a path
+          cat > semgrep-smoke-rules.yml << 'EOF'
+          rules:
+            - id: smoke-subprocess-shell-true
+              languages: [python]
+              severity: ERROR
+              message: subprocess called with shell=True
+              pattern: subprocess.$FUNC(..., shell=True, ...)
+            - id: smoke-eval
+              languages: [python]
+              severity: ERROR
+              message: eval() on dynamic input
+              pattern: eval(...)
+          EOF
+
+          # Directory is not named "tests" to avoid Semgrep default ignores
+          mkdir -p semgrep-sample
+          cat > semgrep-sample/vulnerable.py << 'EOF'
+          import subprocess
+
+          def run(cmd):
+              return subprocess.run(cmd, shell=True)
+
+          def calc(expr):
+              return eval(expr)
+          EOF
+
+      - name: Run Semgrep on vulnerable file
+        id: semgrep-detection
+        uses: $/actions/semgrep
+        with:
+          upload-sarif: false
+          scan-scope: all
+          paths: semgrep-sample/
+          config: semgrep-smoke-rules.yml
+          fail-on-findings: false
+          severity: LOW
+          artifact-name: test2
+
+      - name: Verify issues were detected
+        shell: bash
+        env:
+          SCAN_RESULT: ${{ steps.semgrep-detection.outputs.scan_result }}
+          REPORT_PATH: ${{ steps.semgrep-detection.outputs.report_path }}
+        run: |
+          if [[ "$SCAN_RESULT" != "1" ]]; then
+            echo "Error: Expected Semgrep to find issues (exit code 1), but got: '$SCAN_RESULT'"
+            exit 1
+          fi
+
+          rules=$(jq -r '[.runs[].results[].ruleId] | unique | join(",")' "$REPORT_PATH")
+          echo "Detected rules: $rules"
+          if [[ "$rules" != *smoke-subprocess-shell-true* || "$rules" != *smoke-eval* ]]; then
+            echo "Error: Expected both smoke rules in SARIF report"
+            exit 1
+          fi
+
+          echo "✅ Semgrep successfully detected security issues (exit code: $SCAN_RESULT)"
+
+  # Test 3: Validates that exclude-rules skips the given rules
+  semgrep-exclude-rules-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - *harden-runner
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - *create-test-files
+
+      - name: Run Semgrep with excluded rule
+        id: semgrep-exclude
+        uses: $/actions/semgrep
+        with:
+          upload-sarif: false
+          scan-scope: all
+          paths: semgrep-sample/
+          config: semgrep-smoke-rules.yml
+          exclude-rules: smoke-subprocess-shell-true
+          fail-on-findings: false
+          severity: LOW
+          artifact-name: test3
+
+      - name: Verify rule was excluded
+        shell: bash
+        env:
+          SCAN_RESULT: ${{ steps.semgrep-exclude.outputs.scan_result }}
+          REPORT_PATH: ${{ steps.semgrep-exclude.outputs.report_path }}
+        run: |
+          if [[ "$SCAN_RESULT" != "1" ]]; then
+            echo "Error: Expected remaining rule to report findings (exit code 1), but got: '$SCAN_RESULT'"
+            exit 1
+          fi
+
+          rules=$(jq -r '[.runs[].results[].ruleId] | unique | join(",")' "$REPORT_PATH")
+          echo "Detected rules: $rules"
+          if [[ "$rules" == *smoke-subprocess-shell-true* ]]; then
+            echo "Error: Excluded rule smoke-subprocess-shell-true is present in SARIF report"
+            exit 1
+          fi
+          if [[ "$rules" != *smoke-eval* ]]; then
+            echo "Error: Expected smoke-eval rule in SARIF report"
+            exit 1
+          fi
+
+          echo "✅ exclude-rules successfully skipped smoke-subprocess-shell-true"
+
+  # Summary job - provides single point of success/failure
+  semgrep-test-summary:
+    runs-on: ubuntu-latest
+    needs:
+      - semgrep-test
+      - semgrep-detection-test
+      - semgrep-exclude-rules-test
+    if: always()
+    steps:
+      - name: Check test results
+        shell: bash
+        env:
+          TEST_BASIC_RESULT: ${{ needs.semgrep-test.result }}
+          TEST_DETECTION_RESULT: ${{ needs.semgrep-detection-test.result }}
+          TEST_EXCLUDE_RESULT: ${{ needs.semgrep-exclude-rules-test.result }}
+        run: |
+          if [[ "$TEST_BASIC_RESULT" != "success" ]]; then
+            echo "❌ Basic test failed"
+            exit 1
+          fi
+
+          if [[ "$TEST_DETECTION_RESULT" != "success" ]]; then
+            echo "❌ Detection test failed"
+            exit 1
+          fi
+
+          if [[ "$TEST_EXCLUDE_RESULT" != "success" ]]; then
+            echo "❌ Exclude rules test failed"
+            exit 1
+          fi
+
+          echo "✅ All Semgrep action tests passed successfully!"
