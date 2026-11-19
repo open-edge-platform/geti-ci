@@ -43,7 +43,7 @@ jobs:
 
       - name: Run Semgrep - all scope with defaults
         id: semgrep-all
-        uses: ./actions/semgrep
+        uses: $/actions/semgrep
         with:
           upload-sarif: false
           scan-scope: all
@@ -113,7 +113,7 @@ jobs:
 
       - name: Run Semgrep on vulnerable file
         id: semgrep-detection
-        uses: ./actions/semgrep
+        uses: $/actions/semgrep
         with:
           upload-sarif: false
           scan-scope: all
@@ -161,7 +161,7 @@ jobs:
 
       - name: Run Semgrep with excluded rule
         id: semgrep-exclude
-        uses: ./actions/semgrep
+        uses: $/actions/semgrep
         with:
           upload-sarif: false
           scan-scope: all
