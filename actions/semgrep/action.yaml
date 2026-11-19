@@ -41,6 +41,10 @@ name: "Semgrep SAST Scan"
 description: "Runs Semgrep security scanner with configurable options"
 
 inputs:
+  artifact-name:
+    description: "Artifact name"
+    required: false
+    default: "semgrep-results"
   scan-scope:
     description: "Scope of files to scan (all/changed)"
     required: false
@@ -69,6 +73,14 @@ inputs:
     description: "Whether to fail the action if issues are found"
     required: false
     default: "true"
+  upload-sarif:
+    description: "Whether to upload SARIF results"
+    required: false
+    default: "true"
+  exclude-rules:
+    description: "Rule IDs to skip (comma or newline separated), passed as --exclude-rule"
+    required: false
+    default: ""
   semgrep-version:
     description: "Semgrep version"
     required: false
@@ -110,9 +122,18 @@ runs:
         INPUTS_SEVERITY: ${{ inputs.severity }}
         INPUTS_TIMEOUT: ${{ inputs.timeout }}
         INPUTS_OUTPUT_FORMAT: ${{ inputs.output-format }}
+        INPUTS_EXCLUDE_RULES: ${{ inputs.exclude-rules }}
         BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: |
         set +e
+
+        FILTER_ARGS=()
+        while IFS= read -r rule; do
+          rule="${rule#"${rule%%[![:space:]]*}"}"
+          rule="${rule%"${rule##*[![:space:]]}"}"
+          [[ -n "$rule" ]] && FILTER_ARGS+=(--exclude-rule "$rule")
+        done < <(tr ',' '\n' <<< "$INPUTS_EXCLUDE_RULES")
+
         # Map standard severity levels to Semgrep's levels
         # Semgrep does not support hierarchy, levels must be set explicitly
         case "$INPUTS_SEVERITY" in
@@ -151,6 +172,7 @@ runs:
           # semgrep output is post-processed with jq to remove all suppressed findings from the SARIF uploaded into PR comments
           semgrep scan \
             ${SEMGREP_SEVERITY} \
+            "${FILTER_ARGS[@]}" \
             --quiet \
             --sarif \
             --timeout "$INPUTS_TIMEOUT" \
@@ -165,6 +187,7 @@ runs:
           # Shall not take too much time due to Semgrep caching
           semgrep scan \
             ${SEMGREP_SEVERITY} \
+            "${FILTER_ARGS[@]}" \
             --error \
             --timeout "$INPUTS_TIMEOUT" \
             --metrics=off \
@@ -185,6 +208,7 @@ runs:
           # semgrep output is post-processed with jq to remove all suppressed findings from the SARIF
           semgrep scan \
             ${SEMGREP_SEVERITY} \
+            "${FILTER_ARGS[@]}" \
             --quiet \
             --sarif \
             --timeout "$INPUTS_TIMEOUT" \
@@ -197,6 +221,7 @@ runs:
           echo "Running Semgrep on all files in $INPUTS_PATHS with text output"
           semgrep scan \
             ${SEMGREP_SEVERITY} \
+            "${FILTER_ARGS[@]}" \
             --error \
             --text \
             -o "${TEXT_FILE}" \
@@ -215,13 +240,13 @@ runs:
       if: hashFiles('security-results/semgrep/*') != '' # if any report is available
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
       with:
-        name: semgrep-results
+        name: ${{ inputs.artifact-name }}
         path: security-results/semgrep
         retention-days: 7
 
     - name: Upload reports in SARIF
       # Upload report if SARIF file is available and repo is public
-      if: github.event.repository.private == false && hashFiles('security-results/semgrep/semgrep-results.sarif') != ''
+      if: inputs.upload-sarif == 'true' && github.event.repository.private == false && hashFiles('security-results/semgrep/semgrep-results.sarif') != ''
       uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
       with:
         sarif_file: security-results/semgrep/semgrep-results.sarif
